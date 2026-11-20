@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: inter_nos_test
+          MYSQL_USER: inter_nos_test
+          MYSQL_PASSWORD: inter_nos_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DATABASE_URL: mysql+pymysql://inter_nos_test:inter_nos_test@127.0.0.1:3306/inter_nos_test?charset=utf8mb4
+      DATABASE_URL: mysql+pymysql://inter_nos_test:inter_nos_test@127.0.0.1:3306/inter_nos_test?charset=utf8mb4
+      JWT_SECRET: prueba-ci-no-usar-en-produccion
+      FERNET_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: python -m pip install -e ".[test,quality]"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff formato
+        run: ruff format --check .
+      - name: Migraciones
+        run: alembic upgrade head
+      - name: Pruebas
+        run: pytest
