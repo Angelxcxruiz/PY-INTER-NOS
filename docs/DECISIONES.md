@@ -22,3 +22,6 @@
 - M5 calcula sin float, redondea solo al final con ROUND_HALF_UP y usa la escala de la rubrica.
 - M5 conserva la calificacion existente e impide recalcular.
 - M6 solo implementara los eventos `CALIFICACION_REGISTRADA` y `RETROALIMENTACION_AGREGADA`; M5 deja los TODO sin outbox.
+- M6 usa outbox transaccional real, backoff configurable y adapters de correo.
+- M6 puede leer datos de convocatoria, sesion y usuario para construir mensajes, pero no escribe tablas ajenas.
+- El codigo de convocatoria solo se descifra al construir el correo de invitacion.

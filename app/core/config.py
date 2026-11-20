@@ -46,6 +46,7 @@ class Configuracion(BaseSettings):
         default=1,
         validation_alias="DIAS_CIERRE_AUTOMATICO",
     )
+    max_intentos: int = Field(default=5, validation_alias="MAX_INTENTOS")
 
     @property
     def cors_origins_lista(self) -> list[str]:

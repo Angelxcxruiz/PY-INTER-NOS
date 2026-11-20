@@ -100,8 +100,18 @@ class ServicioEvaluaciones:
         )
         self.repositorio.agregar(calificacion)
         self.db.flush()
-        # TODO [M6]: publicar evento CALIFICACION_REGISTRADA mediante
-        # el servicio de notificaciones con payload {"calificacion_id", "participacion_id"}.
+        from app.modules.sessions.events import publicar
+
+        publicar(
+            self.db,
+            "CALIFICACION_REGISTRADA",
+            "calificacion",
+            calificacion.id,
+            {
+                "calificacion_id": calificacion.id,
+                "participacion_id": participacion_id,
+            },
+        )
 
         mapa_opciones = {}
         preguntas = self._ordenar_preguntas(caso)
@@ -310,8 +320,22 @@ class ServicioEvaluaciones:
                 actualizada_en=momento,
             )
             self.repositorio.agregar(existente)
-        # TODO [M6]: publicar RETROALIMENTACION_AGREGADA con payload
-        # {"retroalimentacion_id", "participacion_id" o "convocatoria_id"}.
+        from app.modules.sessions.events import publicar
+
+        payload = {
+            "retroalimentacion_id": existente.id,
+        }
+        if participacion_id is not None:
+            payload["participacion_id"] = participacion_id
+        else:
+            payload["convocatoria_id"] = convocatoria_id
+        publicar(
+            self.db,
+            "RETROALIMENTACION_AGREGADA",
+            "retroalimentacion",
+            existente.id,
+            payload,
+        )
         self.db.commit()
         self.db.refresh(existente)
         return existente

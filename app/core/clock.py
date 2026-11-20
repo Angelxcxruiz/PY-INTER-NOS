@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 
 class Reloj(Protocol):
@@ -20,3 +21,10 @@ def ahora(reloj: Reloj | None = None) -> datetime:
     if instante.tzinfo is None:
         return instante.replace(tzinfo=UTC)
     return instante.astimezone(UTC)
+
+
+def mostrar_bogota(instante: datetime) -> str:
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=UTC)
+    bogota = instante.astimezone(ZoneInfo("America/Bogota"))
+    return bogota.strftime("%d/%m/%Y %H:%M")

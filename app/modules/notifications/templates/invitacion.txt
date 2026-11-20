@@ -1,0 +1,12 @@
+Invitacion a {{ caso_nombre }}
+
+Hola {{ estudiante_nombre }}.
+
+{{ mensaje_personalizado or "Has sido convocado a la sesion." }}
+
+Inicio: {{ inicio }}
+Fin: {{ fin }}
+Lugar: {{ lugar_fisico or "Por definir" }}
+Tiempo máximo: {{ tiempo_maximo_min }} minutos.
+Codigo de autorizacion: {{ codigo }}
+URL: {{ frontend_url }}
