@@ -25,3 +25,6 @@
 - M6 usa outbox transaccional real, backoff configurable y adapters de correo.
 - M6 puede leer datos de convocatoria, sesion y usuario para construir mensajes, pero no escribe tablas ajenas.
 - El codigo de convocatoria solo se descifra al construir el correo de invitacion.
+- M7 usa la calificacion almacenada y nunca recalcula notas.
+- M7 ejecuta reportes con aislamiento REPEATABLE READ y una transaccion de solo lectura.
+- M7 usa el ultimo intento finalizado para la nota; la seleccion se hace por `finalizada_en`.
