@@ -7,6 +7,7 @@ from app.core.database import SessionLocal
 from app.core.error_handlers import registrar_manejadores
 from app.modules.auth.router import router as router_autenticacion
 from app.modules.auth.router import router_administracion
+from app.modules.cases.router import router as router_casos
 
 configuracion = obtener_configuracion()
 app = FastAPI(
@@ -26,6 +27,7 @@ app.add_middleware(
 registrar_manejadores(app)
 app.include_router(router_autenticacion, prefix="/api/v1")
 app.include_router(router_administracion, prefix="/api/v1")
+app.include_router(router_casos, prefix="/api/v1")
 
 
 @app.get("/health")

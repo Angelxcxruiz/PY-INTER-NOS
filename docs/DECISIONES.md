@@ -9,3 +9,6 @@
 - La validacion del codigo estudiantil se delegara al servicio del Modulo 3.
 - El login estudiantil no revela si el correo existe.
 - La limitacion de intentos de login es en memoria para la Fase 1.
+- M2 usa `caso_origen_id` para enlazar una nueva version con su caso original.
+- La validacion de publicacion acumula todos los errores y los devuelve con ubicacion.
+- La vista de estudiante usa schemas independientes y no incluye opciones correctas ni justificaciones.
