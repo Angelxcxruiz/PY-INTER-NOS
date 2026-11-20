@@ -414,9 +414,20 @@ class ServicioSesiones:
                 detalles={"estado_actual": modelo.estado},
             )
         self._finalizar_modelo(modelo, "DOCENTE")
+        from app.modules.evaluations.service import ServicioEvaluaciones
         from app.modules.participations.service import ServicioParticipaciones
 
-        ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
+        cerradas = ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
+        evaluaciones = ServicioEvaluaciones(self.db, self.reloj)
+        for participacion in cerradas:
+            evaluaciones.calificar_participacion(
+                participacion.id,
+                commit=False,
+            )
+        evaluaciones.registrar_ausencias(
+            modelo.id,
+            commit=False,
+        )
         publicar(
             self.db,
             "SESION_FINALIZADA",
@@ -444,12 +455,20 @@ class ServicioSesiones:
                 if limite_sesion >= self.momento():
                     continue
                 self._finalizar_modelo(modelo, "SISTEMA")
+                from app.modules.evaluations.service import ServicioEvaluaciones
                 from app.modules.participations.service import ServicioParticipaciones
 
-                ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
-                # TODO [M5]: llamar al servicio EvaluacionService.registrar_ausencias(
-                # sesion_id=modelo.id, momento=self.momento()
-                # ) en la Fase 5.
+                cerradas = ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
+                evaluaciones = ServicioEvaluaciones(self.db, self.reloj)
+                for participacion in cerradas:
+                    evaluaciones.calificar_participacion(
+                        participacion.id,
+                        commit=False,
+                    )
+                evaluaciones.registrar_ausencias(
+                    modelo.id,
+                    commit=False,
+                )
                 publicar(
                     self.db,
                     "SESION_FINALIZADA",

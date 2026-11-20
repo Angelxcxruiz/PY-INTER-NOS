@@ -19,3 +19,6 @@
 - M4 calcula el limite de ingreso tardio desde `sesion.iniciada_en` multiplicado por `FRACCION_INGRESO_TARDIO`; confirmar con el responsable academico. Cambiar a `inicio_programado` exige modificar una sola linea en `iniciar()`.
 - M4 usa el ultimo intento finalizado para reportes y documentacion de M7.
 - M4 expira participaciones conservando sus respuestas; M5 las calificara y M8 ejecutara los lotes.
+- M5 calcula sin float, redondea solo al final con ROUND_HALF_UP y usa la escala de la rubrica.
+- M5 conserva la calificacion existente e impide recalcular.
+- M6 solo implementara los eventos `CALIFICACION_REGISTRADA` y `RETROALIMENTACION_AGREGADA`; M5 deja los TODO sin outbox.
