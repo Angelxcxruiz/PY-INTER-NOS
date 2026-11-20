@@ -17,8 +17,8 @@ from app.core.database import SessionLocal
 from app.main import app
 
 
-@pytest.fixture(scope="session", autouse=True)
-def verificar_base_real() -> None:
+@pytest.fixture(scope="session")
+def base_real() -> None:
     configuracion = obtener_configuracion()
     if not configuracion.test_database_url:
         raise RuntimeError(

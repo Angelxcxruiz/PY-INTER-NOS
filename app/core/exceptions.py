@@ -41,3 +41,8 @@ class ErrorConflicto(ErrorDominio):
 class ErrorAutenticacion(ErrorDominio):
     codigo = "NO_AUTENTICADO"
     estado_http = 401
+
+
+class NoAutenticado(ErrorAutenticacion):
+    codigo = "NO_AUTENTICADO"
+    estado_http = 401

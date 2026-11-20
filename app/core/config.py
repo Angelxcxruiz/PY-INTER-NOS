@@ -42,6 +42,10 @@ class Configuracion(BaseSettings):
         default="http://localhost:3000",
         validation_alias="CORS_ORIGINS",
     )
+    dias_cierre_automatico: int = Field(
+        default=1,
+        validation_alias="DIAS_CIERRE_AUTOMATICO",
+    )
 
     @property
     def cors_origins_lista(self) -> list[str]:

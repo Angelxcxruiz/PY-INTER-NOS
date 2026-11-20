@@ -23,12 +23,7 @@ from app.modules.auth.repository import RepositorioUsuarios
 
 
 class ValidadorConvocatoria(Protocol):
-    def validar(
-        self,
-        correo: str,
-        codigo: str,
-        momento: datetime,
-    ) -> tuple[str, str]: ...
+    def __call__(self, correo: str, codigo: str) -> dict: ...
 
 
 _intentos_login: dict[str, list[datetime]] = {}
@@ -109,13 +104,19 @@ class ServicioUsuarios:
                 "El servicio de convocatorias aun no esta disponible",
             )
         try:
-            convocatoria_id, sesion_id = self.validador_convocatoria.validar(
+            datos = self.validador_convocatoria(
                 correo,
                 codigo,
-                self._momento(),
             )
+            convocatoria_id = datos["convocatoria_id"]
+            sesion_id = datos["sesion_id"]
         except Exception as exc:
             self._registrar_fallo(correo)
+            if getattr(exc, "mensaje", None):
+                raise ErrorAutenticacion(
+                    exc.mensaje,
+                    detalles=exc.detalles,
+                ) from exc
             raise ErrorAutenticacion(
                 "Correo o codigo de convocatoria invalido",
             ) from exc

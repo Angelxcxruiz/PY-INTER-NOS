@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -47,3 +49,19 @@ def descifrar(valor_cifrado: str) -> str:
 def generar_codigo(longitud: int = 8) -> str:
     caracteres = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(caracteres) for _ in range(longitud))
+
+
+def normalizar_codigo(codigo: str) -> str:
+    sin_espacios = "".join(codigo.upper().replace("-", "").split())
+    reemplazos = str.maketrans({"O": "0", "I": "1", "L": "1"})
+    return sin_espacios.translate(reemplazos)
+
+
+def hash_codigo(codigo: str) -> str:
+    codigo_normalizado = normalizar_codigo(codigo)
+    return hashlib.sha256(codigo_normalizado.encode("utf-8")).hexdigest()
+
+
+def comparar_hash_codigo(codigo: str, hash_guardado: str) -> bool:
+    hash_calculado = hash_codigo(codigo)
+    return hmac.compare_digest(hash_calculado, hash_guardado)
