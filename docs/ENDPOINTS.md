@@ -91,3 +91,21 @@ Ejemplo minimo para crear una opcion:
 - `POST /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}/codigo/regenerar`
 
 Los endpoints son accesibles a administradores y docentes; los estudiantes no acceden a ellos.
+
+## M4 - Participaciones
+
+- `POST /api/v1/participations/start/{convocatoria_id}` (ESTUDIANTE)
+- `GET /api/v1/participations/by-convocatoria/{convocatoria_id}` (ESTUDIANTE)
+- `GET /api/v1/participations/{participacion_id}` (ESTUDIANTE propietario)
+- `PUT /api/v1/participations/{participacion_id}/answers/{pregunta_id}` (ESTUDIANTE propietario)
+- `POST /api/v1/participations/{participacion_id}/finish` (ESTUDIANTE propietario)
+- `POST /api/v1/participations/convocatorias/{convocatoria_id}/autorizar-repeticion` (DOCENTE o ADMINISTRADOR)
+- `GET /api/v1/participations/convocatorias/{convocatoria_id}/intentos` (DOCENTE o ADMINISTRADOR)
+
+Ejemplo de respuesta:
+
+```json
+{
+  "opcion_id": "11111111-1111-1111-1111-111111111111"
+}
+```

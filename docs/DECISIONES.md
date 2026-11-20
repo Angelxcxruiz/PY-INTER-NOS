@@ -16,3 +16,6 @@
 - M3 registra temporalmente los eventos de dominio en logs; M6 reemplazara el cuerpo por el outbox real.
 - El cierre automatico deja TODOs para M4 y M5; no implementa sus servicios.
 - Los codigos se normalizan antes de cifrar, hashear y comparar.
+- M4 calcula el limite de ingreso tardio desde `sesion.iniciada_en` multiplicado por `FRACCION_INGRESO_TARDIO`; confirmar con el responsable academico. Cambiar a `inicio_programado` exige modificar una sola linea en `iniciar()`.
+- M4 usa el ultimo intento finalizado para reportes y documentacion de M7.
+- M4 expira participaciones conservando sus respuestas; M5 las calificara y M8 ejecutara los lotes.
