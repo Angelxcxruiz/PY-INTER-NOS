@@ -8,6 +8,7 @@ from app.core.error_handlers import registrar_manejadores
 from app.modules.auth.router import router as router_autenticacion
 from app.modules.auth.router import router_administracion
 from app.modules.cases.router import router as router_casos
+from app.modules.participations.router import router as router_participaciones
 from app.modules.sessions.router import router as router_sesiones
 
 configuracion = obtener_configuracion()
@@ -30,6 +31,7 @@ app.include_router(router_autenticacion, prefix="/api/v1")
 app.include_router(router_administracion, prefix="/api/v1")
 app.include_router(router_casos, prefix="/api/v1")
 app.include_router(router_sesiones, prefix="/api/v1")
+app.include_router(router_participaciones, prefix="/api/v1")
 
 
 @app.get("/health")

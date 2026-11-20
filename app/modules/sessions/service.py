@@ -77,6 +77,18 @@ class ServicioSesiones:
         self._verificar_propietario_sesion(modelo, sesion)
         return modelo
 
+    def obtener_sesion_para_participacion(self, sesion_id: str) -> Sesion:
+        return self._obtener_sesion(sesion_id)
+
+    def obtener_convocatoria_para_participacion(self, convocatoria_id: str):
+        convocatoria = self.repositorio.convocatoria_por_id(convocatoria_id)
+        if convocatoria is None:
+            raise ErrorNoEncontrado("Convocatoria no encontrada")
+        return convocatoria
+
+    def listar_convocatorias_para_participacion(self, sesion_id: str):
+        return self.repositorio.convocatorias_sesion(sesion_id)
+
     def listar_espacios(self, sesion: dict) -> list[EspacioAcademico]:
         from sqlalchemy import select
 
@@ -402,6 +414,9 @@ class ServicioSesiones:
                 detalles={"estado_actual": modelo.estado},
             )
         self._finalizar_modelo(modelo, "DOCENTE")
+        from app.modules.participations.service import ServicioParticipaciones
+
+        ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
         publicar(
             self.db,
             "SESION_FINALIZADA",
@@ -429,9 +444,9 @@ class ServicioSesiones:
                 if limite_sesion >= self.momento():
                     continue
                 self._finalizar_modelo(modelo, "SISTEMA")
-                # TODO [M4]: llamar al servicio ParticipacionesService.cerrar_por_sesion(
-                # sesion_id=modelo.id, momento=self.momento()
-                # ) en la Fase 4 para cerrar intentos abiertos.
+                from app.modules.participations.service import ServicioParticipaciones
+
+                ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
                 # TODO [M5]: llamar al servicio EvaluacionService.registrar_ausencias(
                 # sesion_id=modelo.id, momento=self.momento()
                 # ) en la Fase 5.

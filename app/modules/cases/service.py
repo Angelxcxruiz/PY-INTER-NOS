@@ -75,6 +75,9 @@ class ServicioCasos:
             raise ErrorPermiso("No puede consultar este caso")
         return caso
 
+    def obtener_para_participacion(self, caso_id: str) -> Caso:
+        return self._obtener(caso_id)
+
     def obtener_vista_estudiante(self, caso_id: str) -> Caso:
         caso = self._obtener(caso_id)
         if caso.estado != "PUBLICADO":
