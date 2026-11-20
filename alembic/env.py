@@ -9,6 +9,7 @@ import app.modules.auth.models  # noqa: F401
 import app.modules.cases.models  # noqa: F401
 import app.modules.sessions.models  # noqa: F401
 import app.modules.participations.models  # noqa: F401
+import app.modules.evaluations.models  # noqa: F401
 
 configuracion_alembic = context.config
 configuracion = obtener_configuracion()

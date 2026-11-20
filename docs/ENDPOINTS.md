@@ -109,3 +109,11 @@ Ejemplo de respuesta:
   "opcion_id": "11111111-1111-1111-1111-111111111111"
 }
 ```
+
+## M5 - Evaluacion y retroalimentacion
+
+- `GET /api/v1/participations/{participacion_id}/result`
+- `GET /api/v1/convocatorias/{convocatoria_id}/result`
+- `POST /api/v1/participations/{participacion_id}/retroalimentacion`
+- `POST /api/v1/convocatorias/{convocatoria_id}/retroalimentacion`
+- `GET /api/v1/sessions/{sesion_id}/retroalimentaciones`

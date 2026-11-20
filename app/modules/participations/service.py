@@ -37,6 +37,12 @@ class ServicioParticipaciones:
     def momento(self):
         return ahora(self.reloj)
 
+    def obtener_modelo(self, participacion_id: str) -> Participacion:
+        participacion = self.repositorio.por_id(participacion_id)
+        if participacion is None:
+            raise ErrorNoEncontrado("Participacion no encontrada")
+        return participacion
+
     def _verificar_estudiante_convocatoria(self, convocatoria, sesion: dict) -> None:
         if sesion.get("rol") != "ESTUDIANTE":
             raise ErrorPermiso("Solo estudiantes pueden usar participaciones")
@@ -152,6 +158,20 @@ class ServicioParticipaciones:
         self._verificar_estudiante_convocatoria(convocatoria, sesion)
         return participacion
 
+    def obtener_respuestas(self, participacion_id: str) -> list[Respuesta]:
+        return self.repositorio.respuestas(participacion_id)
+
+    def obtener_intentos_finalizados(self, convocatoria_id: str) -> list[Participacion]:
+        return [
+            participacion
+            for participacion in self.repositorio.vigentes_convocatoria(convocatoria_id)
+            if participacion.estado in {"FINALIZADA", "EXPIRADA", "CERRADA_POR_SESION"}
+            and participacion.finalizada_en is not None
+        ]
+
+    def listar_intentos_modelo(self, convocatoria_id: str) -> list[Participacion]:
+        return self.repositorio.vigentes_convocatoria(convocatoria_id)
+
     def obtener_detalle(self, participacion_id: str, sesion: dict) -> dict:
         participacion = self.obtener(participacion_id, sesion)
         respuestas = self.repositorio.respuestas(participacion.id)
@@ -257,9 +277,12 @@ class ServicioParticipaciones:
         participacion.estado = "FINALIZADA"
         participacion.finalizada_en = momento
         participacion.motivo_cierre = "FINALIZADA_POR_ESTUDIANTE"
-        # TODO [M5]: llamar a EvaluacionService.calificar_participacion(
-        # participacion_id=participacion.id, en_la_misma=self.db
-        # ) antes de confirmar la transaccion.
+        from app.modules.evaluations.service import ServicioEvaluaciones
+
+        ServicioEvaluaciones(self.db, self.reloj).calificar_participacion(
+            participacion.id,
+            commit=False,
+        )
         self.db.commit()
         self.db.refresh(participacion)
         resultado = self._progreso(participacion)
@@ -279,8 +302,12 @@ class ServicioParticipaciones:
         bloqueada.estado = "EXPIRADA"
         bloqueada.finalizada_en = momento
         bloqueada.motivo_cierre = "TIEMPO_AGOTADO"
-        # TODO [M5]: disparar la calificacion de esta participacion expirada
-        # mediante EvaluacionService.calificar_participacion(participacion_id=...).
+        from app.modules.evaluations.service import ServicioEvaluaciones
+
+        ServicioEvaluaciones(self.db, self.reloj).calificar_participacion(
+            bloqueada.id,
+            commit=False,
+        )
         self.db.commit()
         self.db.refresh(bloqueada)
         resultado = self._progreso(bloqueada)
@@ -342,7 +369,12 @@ class ServicioParticipaciones:
                 participacion.estado = "EXPIRADA"
                 participacion.finalizada_en = momento
                 participacion.motivo_cierre = "TIEMPO_AGOTADO"
-                # TODO [M5]: calificar participacion expirada.
+                from app.modules.evaluations.service import ServicioEvaluaciones
+
+                ServicioEvaluaciones(self.db, self.reloj).calificar_participacion(
+                    participacion.id,
+                    commit=False,
+                )
                 self.db.commit()
                 cerradas += 1
             except Exception:
