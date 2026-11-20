@@ -126,3 +126,12 @@ Ejemplo de respuesta:
 - `POST /api/v1/notificaciones/leer-todas`
 - `GET /api/v1/sessions/{sesion_id}/entregas`
 - `POST /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}/reenviar`
+
+## M7 - Seguimiento y reportes
+
+- `GET /api/v1/sessions/{sesion_id}/seguimiento`
+- `GET /api/v1/sessions/{sesion_id}/estadisticas`
+- `GET /api/v1/cases/{caso_id}/estadisticas`
+- `GET /api/v1/espacios-academicos/{espacio_id}/estadisticas`
+- `GET /api/v1/sessions/{sesion_id}/reports/participation.csv`
+- `GET /api/v1/sessions/{sesion_id}/reports/answers.csv`
