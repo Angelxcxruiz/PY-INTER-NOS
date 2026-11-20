@@ -73,3 +73,21 @@ Ejemplo minimo para crear una opcion:
   "justificacion": "Es la actuacion adecuada segun el protocolo."
 }
 ```
+
+## M3 - Sesiones y convocatorias
+
+- `POST /api/v1/espacios-academicos`
+- `GET /api/v1/espacios-academicos`
+- `POST /api/v1/sessions`
+- `GET /api/v1/sessions`
+- `GET /api/v1/sessions/{sesion_id}`
+- `PUT /api/v1/sessions/{sesion_id}`
+- `POST /api/v1/sessions/{sesion_id}/start`
+- `POST /api/v1/sessions/{sesion_id}/finish`
+- `GET /api/v1/sessions/{sesion_id}/convocatorias`
+- `POST /api/v1/sessions/{sesion_id}/convocatorias`
+- `DELETE /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}`
+- `GET /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}/codigo`
+- `POST /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}/codigo/regenerar`
+
+Los endpoints son accesibles a administradores y docentes; los estudiantes no acceden a ellos.

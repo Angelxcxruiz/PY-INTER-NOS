@@ -12,3 +12,7 @@
 - M2 usa `caso_origen_id` para enlazar una nueva version con su caso original.
 - La validacion de publicacion acumula todos los errores y los devuelve con ubicacion.
 - La vista de estudiante usa schemas independientes y no incluye opciones correctas ni justificaciones.
+- M3 delega la obtencion de casos al `ServicioCasos`, sin acceder al repositorio de M2.
+- M3 registra temporalmente los eventos de dominio en logs; M6 reemplazara el cuerpo por el outbox real.
+- El cierre automatico deja TODOs para M4 y M5; no implementa sus servicios.
+- Los codigos se normalizan antes de cifrar, hashear y comparar.

@@ -1,4 +1,4 @@
-def test_health_hace_ping_a_mysql(cliente) -> None:
+def test_health_hace_ping_a_mysql(cliente, base_real) -> None:
     respuesta = cliente.get("/health")
 
     assert respuesta.status_code == 200
