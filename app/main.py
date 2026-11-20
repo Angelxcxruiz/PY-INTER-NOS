@@ -9,6 +9,7 @@ from app.modules.auth.router import router as router_autenticacion
 from app.modules.auth.router import router_administracion
 from app.modules.cases.router import router as router_casos
 from app.modules.evaluations.router import router as router_evaluaciones
+from app.modules.notifications.router import router as router_notificaciones
 from app.modules.participations.router import router as router_participaciones
 from app.modules.sessions.router import router as router_sesiones
 
@@ -34,6 +35,7 @@ app.include_router(router_casos, prefix="/api/v1")
 app.include_router(router_sesiones, prefix="/api/v1")
 app.include_router(router_participaciones, prefix="/api/v1")
 app.include_router(router_evaluaciones, prefix="/api/v1")
+app.include_router(router_notificaciones, prefix="/api/v1")
 
 
 @app.get("/health")

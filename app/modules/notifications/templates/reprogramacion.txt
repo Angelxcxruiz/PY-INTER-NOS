@@ -1,0 +1,4 @@
+Sesion reprogramada
+
+Nueva fecha de inicio: {{ inicio }}
+Nueva fecha de fin: {{ fin }}

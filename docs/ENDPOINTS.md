@@ -117,3 +117,12 @@ Ejemplo de respuesta:
 - `POST /api/v1/participations/{participacion_id}/retroalimentacion`
 - `POST /api/v1/convocatorias/{convocatoria_id}/retroalimentacion`
 - `GET /api/v1/sessions/{sesion_id}/retroalimentaciones`
+
+## M6 - Notificaciones y eventos
+
+- `GET /api/v1/notificaciones`
+- `GET /api/v1/notificaciones/contador`
+- `POST /api/v1/notificaciones/{notificacion_id}/leer`
+- `POST /api/v1/notificaciones/leer-todas`
+- `GET /api/v1/sessions/{sesion_id}/entregas`
+- `POST /api/v1/sessions/{sesion_id}/convocatorias/{convocatoria_id}/reenviar`

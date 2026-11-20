@@ -1,0 +1,4 @@
+Calificacion registrada
+
+Nota final: {{ nota_final }}
+{{ aviso }}
