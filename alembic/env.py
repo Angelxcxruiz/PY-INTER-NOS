@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import obtener_configuracion
 from app.core.database import Base
 import app.modules.auth.models  # noqa: F401
+import app.modules.cases.models  # noqa: F401
 
 configuracion_alembic = context.config
 configuracion = obtener_configuracion()
