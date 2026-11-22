@@ -23,6 +23,13 @@ def ahora(reloj: Reloj | None = None) -> datetime:
     return instante.astimezone(UTC)
 
 
+def como_utc(instante: datetime) -> datetime:
+    """MySQL devuelve DATETIME sin zona; se asume UTC, que es como se guarda."""
+    if instante.tzinfo is None:
+        return instante.replace(tzinfo=UTC)
+    return instante.astimezone(UTC)
+
+
 def mostrar_bogota(instante: datetime) -> str:
     if instante.tzinfo is None:
         instante = instante.replace(tzinfo=UTC)

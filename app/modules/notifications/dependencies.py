@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.modules.notifications.adapters import crear_adapter_puerto
+from app.modules.notifications.adapters import PuertoCorreo, crear_adapter_puerto
 from app.modules.notifications.despachador import DespachadorEventos
 from app.modules.notifications.observadores import (
     ObservadorCorreo,
@@ -20,9 +20,9 @@ def obtener_servicio_notificaciones(
     return ServicioNotificaciones(db)
 
 
-def construir_despachador() -> DespachadorEventos:
+def construir_despachador(puerto: PuertoCorreo | None = None) -> DespachadorEventos:
     despachador = DespachadorEventos()
-    puerto = crear_adapter_puerto()
+    puerto = puerto or crear_adapter_puerto()
     observador_correo = ObservadorCorreo(puerto)
     observador_notificacion = ObservadorNotificacionInterna()
     for tipo in (
@@ -35,6 +35,8 @@ def construir_despachador() -> DespachadorEventos:
         "CONVOCATORIA_CREADA",
         "CALIFICACION_REGISTRADA",
         "SESION_REPROGRAMADA",
+        "RESTABLECIMIENTO_CONTRASENA_SOLICITADO",
+        "VERIFICACION_CORREO_SOLICITADA",
     ):
         despachador.suscribir(tipo, observador_correo)
     return despachador

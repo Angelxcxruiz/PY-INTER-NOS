@@ -1,3 +1,4 @@
+import hashlib
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,9 @@ def publicar(
     except ValueError as exc:
         raise ValueError("Tipo de evento no permitido") from exc
 
-    clave = f"{tipo_evento}:{agregado_tipo}:{agregado_id}:{payload}"
+    # Hash de longitud fija: la clave en claro supera los 128 caracteres de la columna.
+    clave_completa = f"{tipo_evento.value}:{agregado_tipo}:{agregado_id}:{sorted(payload.items())}"
+    clave = hashlib.sha256(clave_completa.encode("utf-8")).hexdigest()
     existente = db.query(EventoOutbox).filter(EventoOutbox.clave_idempotencia == clave).first()
     if existente is not None:
         return

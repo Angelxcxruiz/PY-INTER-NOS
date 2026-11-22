@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.0,<2",
     "email-validator>=2.2,<3",
     "jinja2>=3.1,<4",
+    "apscheduler>=3.11,<4",
 ]
 
 [project.optional-dependencies]

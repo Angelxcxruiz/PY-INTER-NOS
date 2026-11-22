@@ -1,4 +1,43 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+pymysql://inter_nos:inter_nos@db:3306/inter_nos?charset=utf8mb4
+      EMAIL_BACKEND: smtp
+      SMTP_HOST: mailpit
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "scripts/start_api.sh"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+pymysql://inter_nos:inter_nos@db:3306/inter_nos?charset=utf8mb4
+      EMAIL_BACKEND: smtp
+      SMTP_HOST: mailpit
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "scripts/run_worker.py"]
+
   db:
     image: mysql:8.0
     restart: unless-stopped
@@ -12,7 +51,7 @@ services:
       - "--collation-server=utf8mb4_unicode_ci"
       - "--default-time-zone=+00:00"
     ports:
-      - "3306:3306"
+     - "3308:3306"
     volumes:
       - db-data:/var/lib/mysql
     healthcheck:

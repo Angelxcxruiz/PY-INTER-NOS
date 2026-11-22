@@ -30,6 +30,9 @@ class SmtpAdapter:
         texto: str,
     ) -> None:
         mensaje = EmailMessage()
+        mensaje["From"] = self.configuracion.smtp_remitente or (
+            f"no-reply@{self.configuracion.dominio_institucional}"
+        )
         mensaje["To"] = destinatario
         mensaje["Subject"] = asunto
         mensaje.set_content(texto)
@@ -91,4 +94,6 @@ def crear_adapter_puerto() -> PuertoCorreo:
         return SmtpAdapter()
     if backend == "fake":
         return FakeAdapter()
-    return ConsolaAdapter()
+    if backend in {"console", "consola"}:
+        return ConsolaAdapter()
+    raise ValueError(f"EMAIL_BACKEND no valido: '{backend}'. Use smtp, console o fake.")

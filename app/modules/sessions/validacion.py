@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import obtener_configuracion
 from app.core.exceptions import NoAutenticado
 from app.core.security import normalizar_codigo
 from app.modules.auth.models import Usuario
@@ -65,6 +66,12 @@ def validador_convocatoria_por_defecto(
 
         if convocatoria_coincidente is None:
             raise NoAutenticado(MENSAJE_CREDENCIAL_INVALIDA)
+
+        if obtener_configuracion().exigir_correo_verificado and not usuario.correo_verificado:
+            raise NoAutenticado(
+                "debes verificar tu correo antes de ingresar; revisa el enlace que enviamos "
+                "a tu bandeja de entrada"
+            )
 
         sesion = db.get(Sesion, convocatoria_coincidente.sesion_id)
         if sesion is None:

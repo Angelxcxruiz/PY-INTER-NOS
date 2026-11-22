@@ -52,7 +52,7 @@ class ProcesadorOutbox:
             try:
                 self.despachador.despachar(self.db, evento)
             except Exception as exc:
-                max_intentos = obtener_configuracion().max_intentos
+                max_intentos = obtener_configuracion().outbox_max_intentos
                 evento.ultimo_error = str(exc)
                 if evento.intentos >= max_intentos:
                     evento.estado = "FALLIDO"
