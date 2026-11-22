@@ -11,8 +11,30 @@ class RespuestaUsuario(BaseModel):
     correo: str
     rol: str
     activo: bool
+    correo_verificado: bool = False
     creado_en: datetime
     actualizado_en: datetime
+
+
+class SolicitudOlvideContrasena(BaseModel):
+    correo: EmailStr
+
+
+class SolicitudRestablecerContrasena(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    nueva_contrasena: str = Field(min_length=8, max_length=128)
+
+
+class SolicitudConfirmarCorreo(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class SolicitudReenviarVerificacion(BaseModel):
+    correo: EmailStr
+
+
+class RespuestaMensaje(BaseModel):
+    mensaje: str
 
 
 class SolicitudLogin(BaseModel):

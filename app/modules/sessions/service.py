@@ -17,6 +17,7 @@ from app.core.security import (
     hash_codigo,
 )
 from app.modules.auth.models import Usuario
+from app.modules.auth.service import ServicioUsuarios
 from app.modules.cases.service import ServicioCasos
 from app.modules.sessions.events import publicar
 from app.modules.sessions.models import (
@@ -230,6 +231,10 @@ class ServicioSesiones:
             raise ErrorConflicto(
                 "El estudiante ya esta convocado en esta sesion",
             )
+
+        # Estudiante nuevo, o existente sin verificar: M1 decide si corresponde enviar el enlace
+        # (no lo hace si ya está verificado ni si se pidió uno hace pocos minutos).
+        ServicioUsuarios(self.db, self.reloj).solicitar_verificacion_correo(usuario)
 
         codigo = generar_codigo(8)
         convocatoria = Convocatoria(

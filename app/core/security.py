@@ -51,6 +51,15 @@ def generar_codigo(longitud: int = 8) -> str:
     return "".join(secrets.choice(caracteres) for _ in range(longitud))
 
 
+def generar_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    # Sin normalizar: el token distingue mayúsculas y minúsculas.
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def normalizar_codigo(codigo: str) -> str:
     sin_espacios = "".join(codigo.upper().replace("-", "").split())
     reemplazos = str.maketrans({"O": "0", "I": "1", "L": "1"})

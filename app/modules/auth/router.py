@@ -9,11 +9,16 @@ from app.modules.auth.dependencies import (
 from app.modules.auth.schemas import (
     PermisoRespuesta,
     RespuestaAcceso,
+    RespuestaMensaje,
     RespuestaUsuario,
+    SolicitudConfirmarCorreo,
     SolicitudCrearUsuario,
     SolicitudEditarUsuario,
     SolicitudLogin,
     SolicitudLoginEstudiante,
+    SolicitudOlvideContrasena,
+    SolicitudReenviarVerificacion,
+    SolicitudRestablecerContrasena,
 )
 from app.modules.auth.service import ServicioUsuarios
 from app.shared.dependencias_autenticacion import requerir_rol
@@ -56,6 +61,45 @@ def usuario_actual(
     usuario=Depends(obtener_usuario_actual),
 ) -> RespuestaUsuario:
     return RespuestaUsuario.model_validate(usuario)
+
+
+MENSAJE_SOLICITUD = "Si el correo esta registrado, recibiras las instrucciones en breve."
+
+
+@router.post("/forgot-password", response_model=RespuestaMensaje, status_code=202)
+def olvide_contrasena(
+    solicitud: SolicitudOlvideContrasena,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+) -> RespuestaMensaje:
+    servicio.solicitar_restablecimiento(solicitud.correo)
+    return RespuestaMensaje(mensaje=MENSAJE_SOLICITUD)
+
+
+@router.post("/reset-password", response_model=RespuestaMensaje)
+def restablecer_contrasena(
+    solicitud: SolicitudRestablecerContrasena,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+) -> RespuestaMensaje:
+    servicio.restablecer_contrasena(solicitud.token, solicitud.nueva_contrasena)
+    return RespuestaMensaje(mensaje="Contrasena actualizada. Ya puede iniciar sesion.")
+
+
+@router.post("/verificar-correo", response_model=RespuestaMensaje)
+def verificar_correo(
+    solicitud: SolicitudConfirmarCorreo,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+) -> RespuestaMensaje:
+    servicio.confirmar_verificacion(solicitud.token)
+    return RespuestaMensaje(mensaje="Correo verificado.")
+
+
+@router.post("/reenviar-verificacion", response_model=RespuestaMensaje)
+def reenviar_verificacion(
+    solicitud: SolicitudReenviarVerificacion,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+) -> RespuestaMensaje:
+    servicio.reenviar_verificacion(solicitud.correo)
+    return RespuestaMensaje(mensaje="Si el correo existe, se envio un enlace de verificacion.")
 
 
 @router_administracion.get(

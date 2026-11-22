@@ -28,3 +28,65 @@
 - M7 usa la calificacion almacenada y nunca recalcula notas.
 - M7 ejecuta reportes con aislamiento REPEATABLE READ y una transaccion de solo lectura.
 - M7 usa el ultimo intento finalizado para la nota; la seleccion se hace por `finalizada_en`.
+- No se usa Git Flow: las ramas protegidas son main y develop y se integra por PR pequeño.
+
+## Fase 8
+
+- El worker es un proceso independiente y no usa el lifespan de FastAPI.
+- El seed exige variables administrativas y puede ejecutarse con `--con-sesion`.
+- El modo `--reset` elimina solo los datos semilla identificables.
+- Docker usa MySQL de desarrollo en el puerto 3308 y MySQL de pruebas en el 3307.
+
+## Fase 9 — Verificación de correo del estudiante (ampliación aprobada por el equipo)
+
+Requisito que no estaba en la especificación original; aprobado por el equipo.
+
+- Al registrar un estudiante (alta por el administrador en M1, o creación al convocar en M3) se
+  publica `VERIFICACION_CORREO_SOLICITADA` en el outbox, en la misma transacción que crea al
+  usuario. Si el envío falla se aplica el backoff de M6 y nunca se revierte el alta.
+- **El token no viaja en el outbox ni se guarda en claro.** El payload lleva solo `usuario_id` y
+  `verificacion_id`. El token (`secrets.token_urlsafe(32)`) lo genera el observador de correo al
+  construir el mensaje y en la base queda únicamente su hash SHA-256 (`verificacion_correo`).
+- La fila de `verificacion_correo` se **reserva al solicitar** (con `token_hash` nulo) y el
+  observador solo completa el hash. Se decidió así para que `verificacion_id` exista desde el
+  evento y para poder aplicar el límite de reenvío sin esperar al worker. Si el envío falla y el
+  evento se reintenta se emite un token nuevo: el anterior nunca salió y no se puede recuperar.
+- El observador no escribe en tablas de M1: pide el token a `ServicioUsuarios`
+  (`preparar_token_verificacion`), que es quien conoce la regla.
+- Vigencia `VERIFICACION_EXPIRA_HORAS` (48 h) y un solo uso. Reenvío limitado a uno cada
+  `VERIFICACION_COOLDOWN_MIN` (5 min) por usuario.
+- `POST /auth/reenviar-verificacion` responde siempre lo mismo para no revelar qué correos existen.
+  Cualquier token inválido, usado o vencido responde 400 con el mismo mensaje.
+- Al convocar no se reenvía a quien ya está verificado. Un estudiante existente sin verificar sí
+  recibe el enlace (sujeto al límite de reenvío).
+- Los docentes y administradores existentes quedan verificados en la migración, y los que cree el
+  administrador nacen verificados: la verificación aplica a estudiantes.
+- **`EXIGIR_CORREO_VERIFICADO`** (por defecto `false`): con `false` la verificación es informativa y
+  el estudiante entra con su código igual; con `true` el validador de M3 rechaza a quien no haya
+  verificado, con un mensaje que indica revisar el correo. La comprobación va después de validar el
+  código, de modo que un código incorrecto sigue dando el mensaje genérico y no filtra información.
+- El seed crea sus usuarios ya verificados para que la demo no dependa del correo.
+
+### Restablecer contraseña (migración 0008)
+
+Solicitado en la misma conversación y aislado en su propia migración (`token_correo`). Aplica a
+docentes y administradores (los estudiantes no tienen contraseña). Enlace de un solo uso, 60 min,
+una solicitud por minuto. Un enlace nuevo invalida los anteriores. Como el correo necesita el
+token, aquí sí se guarda cifrado con Fernet (igual que los códigos de convocatoria) además de su
+hash. `POST /auth/forgot-password` responde siempre igual.
+
+### Correcciones encontradas durante esta fase
+
+- La clave de idempotencia del outbox superaba los 128 caracteres de su columna y MySQL rechazaba
+  el INSERT al publicar eventos de convocatoria, calificación y retroalimentación. Ahora es un
+  SHA-256 (64 caracteres). Pasó desapercibido porque las pruebas anteriores no tocaban MySQL.
+- `EMAIL_BACKEND` desconocido ahora falla con un error claro en lugar de enviar a consola, y el
+  correo lleva remitente (`SMTP_REMITENTE`).
+
+## Limitaciones conocidas
+
+- El flujo completo con MySQL real depende de Docker o de una instancia disponible.
+- El despliegue AWS queda documentado, pero no se ejecutó en esta fase.
+- Amazon SES, ECS y CloudWatch requieren cuentas y permisos externos.
+- Las plantillas son simplificadas y deben ser validadas por el área académica.
+- El worker no publica métricas externas ni usa una cola además del outbox.

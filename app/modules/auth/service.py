@@ -1,25 +1,31 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock
 from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.core.clock import Reloj, ahora
+from app.core.clock import Reloj, ahora, como_utc
 from app.core.config import obtener_configuracion
+from app.core.enums import PropositoToken, TipoEvento
 from app.core.exceptions import (
     ErrorAutenticacion,
     ErrorConflicto,
+    ErrorDominio,
     ErrorNoEncontrado,
     ErrorPermiso,
     ErrorValidacion,
 )
 from app.core.security import (
+    cifrar,
     crear_jwt,
+    generar_token,
     hash_contrasena,
+    hash_token,
     verificar_contrasena,
 )
-from app.modules.auth.models import Usuario
+from app.modules.auth.models import TokenCorreo, Usuario, VerificacionCorreo
 from app.modules.auth.repository import RepositorioUsuarios
+from app.modules.sessions.events import publicar
 
 
 class ValidadorConvocatoria(Protocol):
@@ -163,10 +169,15 @@ class ServicioUsuarios:
             hash_contrasena=hash_contrasena(contrasena) if contrasena else None,
             rol=rol,
             activo=activo,
+            # Los docentes y administradores los da de alta el administrador: no se les pide.
+            correo_verificado=rol != "ESTUDIANTE",
+            verificado_en=momento if rol != "ESTUDIANTE" else None,
             creado_en=momento,
             actualizado_en=momento,
         )
         usuario = self.repositorio.agregar(usuario)
+        if rol == "ESTUDIANTE":
+            self.solicitar_verificacion_correo(usuario)
         self.db.commit()
         self.db.refresh(usuario)
         return usuario
@@ -265,3 +276,179 @@ class ServicioUsuarios:
         if not usuario.activo:
             raise ErrorPermiso("Usuario desactivado")
         return usuario
+
+    # --- Enlaces de un solo uso por correo -------------------------------------------------
+
+    def _emitir_token(
+        self,
+        usuario: Usuario,
+        proposito: PropositoToken,
+        vigencia: timedelta,
+        tipo_evento: TipoEvento,
+    ) -> bool:
+        """Crea el token y su evento de outbox en la transacción en curso (sin commit).
+
+        Devuelve False si se pidió otro enlace hace menos de TOKEN_COOLDOWN_SEG, para que
+        nadie pueda usar el endpoint para inundar de correos a un usuario.
+        """
+        momento = self._momento()
+        pendientes = self.repositorio.tokens_pendientes(usuario.id, proposito.value)
+        for pendiente in pendientes:
+            reciente = (momento - como_utc(pendiente.creado_en)).total_seconds() < (
+                self.configuracion.token_cooldown_seg
+            )
+            if reciente and como_utc(pendiente.expira_en) > momento:
+                return False
+
+        # Un enlace nuevo invalida los anteriores sin usar.
+        for pendiente in pendientes:
+            pendiente.usado_en = momento
+
+        token = generar_token()
+        registro = self.repositorio.agregar_token(
+            TokenCorreo(
+                usuario_id=usuario.id,
+                proposito=proposito.value,
+                token_hash=hash_token(token),
+                token_cifrado=cifrar(token),
+                expira_en=momento + vigencia,
+                creado_en=momento,
+            )
+        )
+        publicar(
+            self.db,
+            tipo_evento.value,
+            "token_correo",
+            registro.id,
+            {"token_id": registro.id, "usuario_id": usuario.id},
+        )
+        return True
+
+    def _token_valido(self, token: str, proposito: PropositoToken) -> TokenCorreo:
+        registro = self.repositorio.token_por_hash(hash_token(token))
+        if (
+            registro is None
+            or registro.proposito != proposito.value
+            or registro.usado_en is not None
+            or como_utc(registro.expira_en) <= self._momento()
+        ):
+            raise ErrorValidacion(
+                "El enlace no es valido o ya expiro",
+                codigo="TOKEN_INVALIDO",
+            )
+        return registro
+
+    def solicitar_restablecimiento(self, correo: str) -> None:
+        """Siempre termina igual, exista o no el correo, para no revelar qué cuentas existen."""
+        usuario = self.repositorio.por_correo(correo.strip().lower())
+        if (
+            usuario is None
+            or not usuario.activo
+            or usuario.rol == "ESTUDIANTE"
+            or usuario.hash_contrasena is None
+        ):
+            return
+        self._emitir_token(
+            usuario,
+            PropositoToken.RESTABLECER_CONTRASENA,
+            timedelta(minutes=self.configuracion.token_restablecer_expira_min),
+            TipoEvento.RESTABLECIMIENTO_CONTRASENA_SOLICITADO,
+        )
+        self.db.commit()
+
+    def restablecer_contrasena(self, token: str, nueva_contrasena: str) -> None:
+        registro = self._token_valido(token, PropositoToken.RESTABLECER_CONTRASENA)
+        usuario = self.repositorio.por_id(registro.usuario_id)
+        if usuario is None or not usuario.activo:
+            raise ErrorValidacion("El enlace no es valido o ya expiro", codigo="TOKEN_INVALIDO")
+
+        momento = self._momento()
+        usuario.hash_contrasena = hash_contrasena(nueva_contrasena)
+        usuario.actualizado_en = momento
+        registro.usado_en = momento
+        for otro in self.repositorio.tokens_pendientes(usuario.id, registro.proposito):
+            otro.usado_en = momento
+        self.db.commit()
+        with _candado_intentos:
+            _intentos_login.pop(usuario.correo.lower(), None)
+
+    # --- Verificación de correo (Fase 9) ----------------------------------------------------
+
+    def solicitar_verificacion_correo(self, usuario: Usuario) -> bool:
+        """Reserva la solicitud y publica el evento en la transacción en curso (sin commit).
+
+        Lo llaman M1 (alta de estudiante) y M3 (al convocar). Devuelve False si el correo ya
+        está verificado o si se pidió otro enlace hace menos de VERIFICACION_COOLDOWN_MIN.
+        El token no se genera aquí: lo genera el observador al construir el correo.
+        """
+        if usuario.correo_verificado:
+            return False
+        momento = self._momento()
+        ultima = self.repositorio.ultima_verificacion(usuario.id)
+        if ultima is not None:
+            espera = timedelta(minutes=self.configuracion.verificacion_cooldown_min)
+            if momento - como_utc(ultima.creada_en) < espera:
+                return False
+
+        verificacion = self.repositorio.agregar_verificacion(
+            VerificacionCorreo(
+                usuario_id=usuario.id,
+                expira_en=momento + timedelta(hours=self.configuracion.verificacion_expira_horas),
+                creada_en=momento,
+            )
+        )
+        publicar(
+            self.db,
+            TipoEvento.VERIFICACION_CORREO_SOLICITADA.value,
+            "verificacion_correo",
+            verificacion.id,
+            {"usuario_id": usuario.id, "verificacion_id": verificacion.id},
+        )
+        return True
+
+    def preparar_token_verificacion(self, verificacion_id: str) -> tuple[Usuario, str] | None:
+        """Genera el token al construir el correo y guarda solo su hash (sin commit).
+
+        Lo llama el observador de correo de M6. Devuelve None si ya no hace falta enviar nada.
+        Si el envío falla y el evento se reintenta, se emite un token nuevo: el anterior nunca
+        llegó a nadie y no se puede recuperar desde su hash.
+        """
+        verificacion = self.repositorio.verificacion_por_id(verificacion_id)
+        if verificacion is None or verificacion.usada_en is not None:
+            return None
+        usuario = self.repositorio.por_id(verificacion.usuario_id)
+        if usuario is None or not usuario.activo or usuario.correo_verificado:
+            return None
+
+        token = generar_token()
+        verificacion.token_hash = hash_token(token)
+        verificacion.expira_en = self._momento() + timedelta(
+            hours=self.configuracion.verificacion_expira_horas
+        )
+        self.db.flush()
+        return usuario, token
+
+    def confirmar_verificacion(self, token: str) -> None:
+        verificacion = self.repositorio.verificacion_por_hash(hash_token(token))
+        momento = self._momento()
+        if (
+            verificacion is None
+            or verificacion.usada_en is not None
+            or como_utc(verificacion.expira_en) <= momento
+        ):
+            raise ErrorDominio("El enlace no es valido o ya expiro", codigo="TOKEN_INVALIDO")
+        usuario = self.repositorio.por_id(verificacion.usuario_id)
+        if usuario is None or not usuario.activo:
+            raise ErrorDominio("El enlace no es valido o ya expiro", codigo="TOKEN_INVALIDO")
+
+        usuario.correo_verificado = True
+        usuario.verificado_en = momento
+        verificacion.usada_en = momento
+        self.db.commit()
+
+    def reenviar_verificacion(self, correo: str) -> None:
+        """Termina siempre igual exista o no el correo, para no revelar qué cuentas existen."""
+        usuario = self.repositorio.por_correo(correo.strip().lower())
+        if usuario is not None and usuario.activo:
+            self.solicitar_verificacion_correo(usuario)
+            self.db.commit()

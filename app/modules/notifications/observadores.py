@@ -3,10 +3,11 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.clock import ahora, mostrar_bogota
+from app.core.clock import ahora, como_utc, mostrar_bogota
 from app.core.config import obtener_configuracion
 from app.core.security import descifrar
-from app.modules.auth.models import Usuario
+from app.modules.auth.models import TokenCorreo, Usuario
+from app.modules.auth.service import ServicioUsuarios
 from app.modules.cases.models import Caso
 from app.modules.evaluations.models import Calificacion
 from app.modules.notifications.adapters import PuertoCorreo
@@ -14,6 +15,16 @@ from app.modules.notifications.models import EntregaCorreo, Notificacion
 from app.modules.notifications.plantillas import renderizar
 from app.modules.participations.models import Participacion
 from app.modules.sessions.models import Convocatoria, Sesion
+
+# tipo de evento -> (plantilla, asunto, ruta del frontend, texto de vigencia)
+PLANTILLAS_TOKEN = {
+    "RESTABLECIMIENTO_CONTRASENA_SOLICITADO": (
+        "restablecer_contrasena",
+        "Restablece tu contraseña de Inter Nos",
+        "/restablecer-contrasena",
+        lambda c: f"{c.token_restablecer_expira_min} minutos",
+    ),
+}
 
 
 class Observador(Protocol):
@@ -122,6 +133,89 @@ class ObservadorCorreo:
             self._manejar_calificacion(db, evento)
         elif evento.tipo == "SESION_REPROGRAMADA":
             self._manejar_reprogramacion(db, evento)
+        elif evento.tipo in PLANTILLAS_TOKEN:
+            self._manejar_token(db, evento)
+        elif evento.tipo == "VERIFICACION_CORREO_SOLICITADA":
+            self._manejar_verificacion(db, evento)
+
+    def _manejar_verificacion(self, db: Session, evento) -> None:
+        entrega_previa = db.scalar(
+            select(EntregaCorreo).where(
+                EntregaCorreo.evento_id == evento.id,
+                EntregaCorreo.tipo == evento.tipo,
+            )
+        )
+        if entrega_previa is not None and entrega_previa.estado == "ENVIADO":
+            return
+
+        # El token se genera aquí, justo al construir el correo; en la base queda solo su hash.
+        preparado = ServicioUsuarios(db).preparar_token_verificacion(
+            evento.payload.get("verificacion_id")
+        )
+        if preparado is None:
+            return
+        usuario, token = preparado
+
+        configuracion = obtener_configuracion()
+        enlace = f"{configuracion.frontend_url.rstrip('/')}/verificar-correo?token={token}"
+        html, texto = renderizar(
+            "verificar_correo.html",
+            "verificar_correo.txt",
+            {
+                "nombre": usuario.nombre,
+                "enlace": enlace,
+                "vigencia": f"{configuracion.verificacion_expira_horas} horas",
+            },
+        )
+        entrega = self._entrega(db, evento, usuario.correo)
+        entrega.intentos += 1
+        try:
+            self.puerto.enviar(usuario.correo, "Verifica tu correo de Inter Nos", html, texto)
+        except Exception as exc:
+            entrega.estado = "FALLIDO"
+            entrega.ultimo_error = str(exc)
+            raise
+        entrega.estado = "ENVIADO"
+        entrega.ultimo_error = None
+        entrega.enviado_en = ahora()
+
+    def _manejar_token(self, db: Session, evento) -> None:
+        plantilla, asunto, ruta, vigencia = PLANTILLAS_TOKEN[evento.tipo]
+        token = db.get(TokenCorreo, evento.payload.get("token_id"))
+        # Sin token vigente no hay nada que enviar: no es un fallo, el enlace ya no sirve.
+        if token is None or token.usado_en is not None or como_utc(token.expira_en) <= ahora():
+            return
+        usuario = db.get(Usuario, token.usuario_id)
+        if usuario is None or not usuario.activo:
+            return
+
+        entrega = self._entrega(db, evento, usuario.correo)
+        if entrega.estado == "ENVIADO":
+            return
+
+        configuracion = obtener_configuracion()
+        enlace = (
+            f"{configuracion.frontend_url.rstrip('/')}{ruta}?token={descifrar(token.token_cifrado)}"
+        )
+        html, texto = renderizar(
+            f"{plantilla}.html",
+            f"{plantilla}.txt",
+            {
+                "nombre": usuario.nombre,
+                "enlace": enlace,
+                "vigencia": vigencia(configuracion),
+            },
+        )
+        entrega.intentos += 1
+        try:
+            self.puerto.enviar(usuario.correo, asunto, html, texto)
+        except Exception as exc:
+            entrega.estado = "FALLIDO"
+            entrega.ultimo_error = str(exc)
+            raise
+        entrega.estado = "ENVIADO"
+        entrega.ultimo_error = None
+        entrega.enviado_en = ahora()
 
     def _manejar_invitacion(self, db: Session, evento) -> None:
         convocatoria_id = evento.payload.get("convocatoria_id")

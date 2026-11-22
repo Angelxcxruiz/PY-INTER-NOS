@@ -1,12 +1,66 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.auth.models import Permiso, Usuario, UsuarioPermiso
+from app.modules.auth.models import (
+    Permiso,
+    TokenCorreo,
+    Usuario,
+    UsuarioPermiso,
+    VerificacionCorreo,
+)
 
 
 class RepositorioUsuarios:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def agregar_verificacion(self, verificacion: VerificacionCorreo) -> VerificacionCorreo:
+        self.db.add(verificacion)
+        self.db.flush()
+        return verificacion
+
+    def verificacion_por_hash(self, token_hash: str) -> VerificacionCorreo | None:
+        return self.db.scalar(
+            select(VerificacionCorreo)
+            .where(VerificacionCorreo.token_hash == token_hash)
+            .with_for_update()
+        )
+
+    def verificacion_por_id(self, verificacion_id: str) -> VerificacionCorreo | None:
+        return self.db.scalar(
+            select(VerificacionCorreo)
+            .where(VerificacionCorreo.id == verificacion_id)
+            .with_for_update()
+        )
+
+    def ultima_verificacion(self, usuario_id: str) -> VerificacionCorreo | None:
+        return self.db.scalar(
+            select(VerificacionCorreo)
+            .where(VerificacionCorreo.usuario_id == usuario_id)
+            .order_by(VerificacionCorreo.creada_en.desc())
+            .limit(1)
+        )
+
+    def agregar_token(self, token: TokenCorreo) -> TokenCorreo:
+        self.db.add(token)
+        self.db.flush()
+        return token
+
+    def token_por_hash(self, token_hash: str) -> TokenCorreo | None:
+        return self.db.scalar(
+            select(TokenCorreo).where(TokenCorreo.token_hash == token_hash).with_for_update()
+        )
+
+    def tokens_pendientes(self, usuario_id: str, proposito: str) -> list[TokenCorreo]:
+        return list(
+            self.db.scalars(
+                select(TokenCorreo).where(
+                    TokenCorreo.usuario_id == usuario_id,
+                    TokenCorreo.proposito == proposito,
+                    TokenCorreo.usado_en.is_(None),
+                )
+            ).all()
+        )
 
     def por_id(self, usuario_id: str) -> Usuario | None:
         return self.db.get(Usuario, usuario_id)

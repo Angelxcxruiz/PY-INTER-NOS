@@ -38,6 +38,36 @@ Ejemplo:
 }
 ```
 
+### Verificacion de correo del estudiante
+
+- `POST /api/v1/auth/verificar-correo` (publico): `{"token": "..."}`. Token invalido, usado o
+  vencido responde 400 con codigo `TOKEN_INVALIDO`.
+- `POST /api/v1/auth/reenviar-verificacion` (publico): `{"correo": "..."}`. Responde siempre
+  `200` con el mismo mensaje, exista o no el correo. Maximo un envio cada 5 minutos por usuario.
+
+El enlace del correo es `{FRONTEND_URL}/verificar-correo?token=...`; el frontend debe tomar el
+`token` y llamar al endpoint anterior. `GET /auth/me` expone `correo_verificado`.
+
+### Restablecer contrasena
+
+- `POST /api/v1/auth/forgot-password` (publico): `{"correo": "..."}`. Responde siempre `202`.
+- `POST /api/v1/auth/reset-password` (publico): `{"token": "...", "nueva_contrasena": "..."}`.
+  El enlace del correo es `{FRONTEND_URL}/restablecer-contrasena?token=...`.
+
+### Administracion
+
+- `GET /api/v1/admin/users` (ADMINISTRADOR)
+- `POST /api/v1/admin/users` (ADMINISTRADOR)
+- `GET /api/v1/admin/users/{usuario_id}` (ADMINISTRADOR)
+- `PATCH /api/v1/admin/users/{usuario_id}` (ADMINISTRADOR)
+- `DELETE /api/v1/admin/users/{usuario_id}` (ADMINISTRADOR)
+- `POST /api/v1/admin/users/{usuario_id}/activate` (ADMINISTRADOR)
+- `POST /api/v1/admin/users/{usuario_id}/deactivate` (ADMINISTRADOR)
+- `GET /api/v1/admin/permissions` (ADMINISTRADOR)
+- `PUT /api/v1/admin/users/{usuario_id}/permissions` (ADMINISTRADOR)
+- `POST /api/v1/admin/users/{usuario_id}/permissions/{permiso_id}` (ADMINISTRADOR)
+- `DELETE /api/v1/admin/users/{usuario_id}/permissions/{permiso_id}` (ADMINISTRADOR)
+
 ## M2 - Gestion de casos
 
 - `GET /api/v1/cases`

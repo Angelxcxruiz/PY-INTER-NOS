@@ -8,18 +8,43 @@ Backend FastAPI del simulador de casos academicos de Psicologia Social.
 - Docker Desktop con Docker Compose
 - MySQL 8 para pruebas
 
-## Levantar los servicios
+## Levantar desde cero
+
+1. Clonar el repositorio y entrar en la carpeta.
+2. Copiar `.env.example` a `.env` y revisar secretos.
+3. Levantar servicios:
 
 ```powershell
-docker compose up -d db db-test mailpit
+make up
 ```
 
-Las bases disponibles son:
+4. Ejecutar migraciones:
 
-- Desarrollo: `inter_nos` en `localhost:3306`
-- Pruebas: `inter_nos_test` en `localhost:3307`
-- Mailpit SMTP: `localhost:1025`
-- Mailpit Web: `http://localhost:8025`
+```powershell
+make migrate
+```
+
+5. Crear datos de demostración:
+
+```powershell
+make seed
+```
+
+Con sesión demostrativa:
+
+```powershell
+docker compose run --rm api python scripts/seed.py --con-sesion
+```
+
+Swagger: `http://localhost:8000/docs`
+
+## Puertos
+
+- API: `8000`
+- Desarrollo MySQL: `3308`
+- Pruebas MySQL: `3307`
+- Mailpit SMTP: `1025`
+- Mailpit Web: `8025`
 
 ## Configuracion
 

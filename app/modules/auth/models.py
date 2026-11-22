@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.mysql import CHAR, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -27,6 +28,10 @@ class Usuario(Base):
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     creado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+    correo_verificado: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    verificado_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
 
     permisos: Mapped[list["Permiso"]] = relationship(
         secondary="usuario_permiso",
@@ -67,3 +72,50 @@ class UsuarioPermiso(Base):
         primary_key=True,
     )
     asignado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+
+class VerificacionCorreo(Base):
+    """Solicitud de verificación del correo de un usuario.
+
+    La fila se reserva al solicitar (dentro de la transacción de negocio, con el mismo id que
+    viaja en el evento) pero el token se genera después, al construir el correo. Solo se guarda
+    su hash SHA-256: el token en claro no se puede recuperar.
+    """
+
+    __tablename__ = "verificacion_correo"
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=uuid_como_texto)
+    usuario_id: Mapped[str] = mapped_column(
+        CHAR(36),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True, unique=True)
+    expira_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+    usada_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+
+class TokenCorreo(Base):
+    """Enlace de un solo uso para restablecer la contraseña.
+
+    Se guarda el hash SHA-256 para validar y el token cifrado con Fernet para poder
+    construir el correo desde el worker, igual que los códigos de convocatoria.
+    """
+
+    __tablename__ = "token_correo"
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=uuid_como_texto)
+    usuario_id: Mapped[str] = mapped_column(
+        CHAR(36),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    proposito: Mapped[str] = mapped_column(String(30), nullable=False)
+    token_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False, unique=True)
+    token_cifrado: Mapped[str] = mapped_column(String(512), nullable=False)
+    expira_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+    usado_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    creado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)

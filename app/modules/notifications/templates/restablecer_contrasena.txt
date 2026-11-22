@@ -1,0 +1,10 @@
+Restablecer contraseña
+
+Hola {{ nombre }}.
+
+Recibimos una solicitud para restablecer tu contraseña de Inter Nos.
+Abre este enlace para crear una contraseña nueva:
+{{ enlace }}
+
+El enlace es de un solo uso y vence en {{ vigencia }}.
+Si no fuiste tú, ignora este correo: tu contraseña no cambiará.

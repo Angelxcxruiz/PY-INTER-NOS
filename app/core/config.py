@@ -31,6 +31,7 @@ class Configuracion(BaseSettings):
     smtp_port: int = Field(default=1025, validation_alias="SMTP_PORT")
     smtp_user: str = Field(default="", validation_alias="SMTP_USER")
     smtp_password: str = Field(default="", validation_alias="SMTP_PASSWORD")
+    smtp_remitente: str | None = Field(default=None, validation_alias="SMTP_REMITENTE")
     escala_nota_max: str = Field(default="5.00", validation_alias="ESCALA_NOTA_MAX")
     nota_aprobatoria: str = Field(default="3.00", validation_alias="NOTA_APROBATORIA")
     fraccion_ingreso_tardio: str = Field(
@@ -42,11 +43,43 @@ class Configuracion(BaseSettings):
         default="http://localhost:3000",
         validation_alias="CORS_ORIGINS",
     )
+    token_restablecer_expira_min: int = Field(
+        default=60,
+        validation_alias="TOKEN_RESTABLECER_EXPIRA_MIN",
+    )
+    token_cooldown_seg: int = Field(default=60, validation_alias="TOKEN_COOLDOWN_SEG")
+    verificacion_expira_horas: int = Field(default=48, validation_alias="VERIFICACION_EXPIRA_HORAS")
+    verificacion_cooldown_min: int = Field(default=5, validation_alias="VERIFICACION_COOLDOWN_MIN")
+    exigir_correo_verificado: bool = Field(
+        default=False, validation_alias="EXIGIR_CORREO_VERIFICADO"
+    )
     dias_cierre_automatico: int = Field(
         default=1,
         validation_alias="DIAS_CIERRE_AUTOMATICO",
     )
     max_intentos: int = Field(default=5, validation_alias="MAX_INTENTOS")
+    outbox_max_intentos: int = Field(default=5, validation_alias="OUTBOX_MAX_INTENTOS")
+    outbox_intervalo_seg: int = Field(default=10, validation_alias="OUTBOX_INTERVALO_SEG")
+    worker_intervalo_expiracion_seg: int = Field(
+        default=60,
+        validation_alias="WORKER_INTERVALO_EXPIRACION_SEG",
+    )
+    worker_intervalo_cierre_seg: int = Field(
+        default=300,
+        validation_alias="WORKER_INTERVALO_CIERRE_SEG",
+    )
+    admin_inicial_nombre: str | None = Field(
+        default=None,
+        validation_alias="ADMIN_INICIAL_NOMBRE",
+    )
+    admin_inicial_correo: str | None = Field(
+        default=None,
+        validation_alias="ADMIN_INICIAL_CORREO",
+    )
+    admin_inicial_contrasena: str | None = Field(
+        default=None,
+        validation_alias="ADMIN_INICIAL_CONTRASENA",
+    )
 
     @property
     def cors_origins_lista(self) -> list[str]:

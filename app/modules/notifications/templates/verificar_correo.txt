@@ -1,0 +1,10 @@
+Verifica tu correo
+
+Hola {{ nombre }}.
+
+Confirma que esta dirección de correo es tuya para tu cuenta de Inter Nos.
+Abre este enlace:
+{{ enlace }}
+
+El enlace es de un solo uso y vence en {{ vigencia }}.
+Si no solicitaste esto, puedes ignorar este correo.
