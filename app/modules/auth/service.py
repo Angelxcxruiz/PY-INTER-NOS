@@ -88,7 +88,7 @@ class ServicioUsuarios:
             or not usuario.activo
             or usuario.rol not in {"ADMINISTRADOR", "DOCENTE"}
             or usuario.hash_contrasena is None
-            or not verificar_contrasena(contrasena, usuario.hash_contrasena)
+            or not verificar_contrasena(usuario.hash_contrasena, contrasena)
         ):
             self._registrar_fallo(correo)
             raise ErrorAutenticacion("Credenciales invalidas")

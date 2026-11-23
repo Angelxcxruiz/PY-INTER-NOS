@@ -6,7 +6,7 @@ from typing import Any
 
 import jwt
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import InvalidHashError, VerificationError
 from cryptography.fernet import Fernet
 
 from app.core.config import obtener_configuracion
@@ -20,10 +20,17 @@ def hash_contrasena(contrasena: str) -> str:
     return _hasher.hash(contrasena)
 
 
-def verificar_contrasena(contrasena: str, hash_guardado: str) -> bool:
+def verificar_contrasena(hash_guardado: str | None, contrasena: str | None) -> bool:
+    """True solo si la contraseña corresponde al hash. Nunca lanza por datos inválidos.
+
+    El orden (hash, contraseña) es el mismo de argon2-cffi. Un hash nulo, vacío, corrupto o que
+    no sea Argon2 cuenta como contraseña incorrecta, para que el login responda 401 y no 500.
+    """
+    if not hash_guardado or contrasena is None:
+        return False
     try:
         return _hasher.verify(hash_guardado, contrasena)
-    except VerifyMismatchError:
+    except (VerificationError, InvalidHashError):
         return False
 
 
