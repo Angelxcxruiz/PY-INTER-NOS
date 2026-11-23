@@ -1,7 +1,29 @@
+import hashlib
 from functools import lru_cache
 
-from pydantic import Field
+from cryptography.fernet import Fernet
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valor que trae .env.example en los secretos: los scripts de seed se niegan a usarlo.
+MARCADOR_SECRETO = "CAMBIAR-EN-PRODUCCION"
+
+# Secretos que estuvieron publicados en el repositorio: se dan por comprometidos y la API no
+# arranca con ellos. La clave Fernet se compara por su huella para no volver a escribirla aquí.
+_SECRETOS_RECHAZADOS = {MARCADOR_SECRETO, "cambiar-en-entorno", "cambiar-por-un-secreto-largo"}
+_HUELLAS_RECHAZADAS = {"1aeb65c7564634b9f6da4342629ec840b21019a6acfca0944e0576b6031dc906"}
+
+_AYUDA_SECRETOS = (
+    "Defina valores propios en el .env.\n"
+    '  JWT_SECRET: python -c "import secrets; print(secrets.token_urlsafe(48))"\n'
+    '  FERNET_KEY: python -c "from cryptography.fernet import Fernet; '
+    'print(Fernet.generate_key().decode())"'
+)
+
+
+def _es_secreto_publico(valor: str) -> bool:
+    huella = hashlib.sha256(valor.encode("utf-8")).hexdigest()
+    return valor in _SECRETOS_RECHAZADOS or huella in _HUELLAS_RECHAZADAS
 
 
 class Configuracion(BaseSettings):
@@ -9,18 +31,17 @@ class Configuracion(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Los errores de validación no deben imprimir el valor de entrada: incluiría secretos.
+        hide_input_in_errors=True,
     )
 
     database_url: str = Field(
         default="mysql+pymysql://inter_nos:inter_nos@127.0.0.1:3306/inter_nos?charset=utf8mb4",
     )
     test_database_url: str | None = None
-    jwt_secreto: str = Field(default="cambiar-en-entorno", validation_alias="JWT_SECRET")
+    jwt_secreto: str = Field(default="", validation_alias="JWT_SECRET")
     jwt_expira_min: int = Field(default=60, validation_alias="JWT_EXPIRA_MIN")
-    fernet_key: str = Field(
-        default="7qpD1AuRHDuYeo1DewnaXPtepYHy5zJc1oBk5ve_pAQ=",
-        validation_alias="FERNET_KEY",
-    )
+    fernet_key: str = Field(default="", validation_alias="FERNET_KEY")
     dominio_institucional: str = Field(
         default="unal.edu.co",
         validation_alias="DOMINIO_INSTITUCIONAL",
@@ -80,6 +101,25 @@ class Configuracion(BaseSettings):
         default=None,
         validation_alias="ADMIN_INICIAL_CONTRASENA",
     )
+    docente_password: str | None = Field(default=None, validation_alias="DOCENTE_PASSWORD")
+
+    @model_validator(mode="after")
+    def _exigir_secretos_propios(self) -> "Configuracion":
+        problemas = []
+        for variable, valor in (("JWT_SECRET", self.jwt_secreto), ("FERNET_KEY", self.fernet_key)):
+            valor = valor.strip()
+            if not valor:
+                problemas.append(f"{variable} no esta definida")
+            elif _es_secreto_publico(valor):
+                problemas.append(f"{variable} sigue con un valor de ejemplo o publicado")
+        if self.fernet_key.strip() and not _es_secreto_publico(self.fernet_key.strip()):
+            try:
+                Fernet(self.fernet_key.strip().encode("utf-8"))
+            except ValueError:
+                problemas.append("FERNET_KEY no es una clave Fernet valida")
+        if problemas:
+            raise ValueError(f"Configuracion insegura: {'; '.join(problemas)}.\n{_AYUDA_SECRETOS}")
+        return self
 
     @property
     def cors_origins_lista(self) -> list[str]:

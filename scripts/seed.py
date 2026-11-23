@@ -1,5 +1,4 @@
 import argparse
-import os
 import sys
 import uuid
 from datetime import timedelta
@@ -9,7 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy import delete, select
 
 from app.core.clock import ahora
-from app.core.config import obtener_configuracion
+from app.core.config import MARCADOR_SECRETO, obtener_configuracion
 from app.core.database import SessionLocal
 from app.core.security import cifrar, generar_codigo, hash_codigo, hash_contrasena
 from app.modules.auth.models import Permiso, Usuario, UsuarioPermiso
@@ -311,9 +310,18 @@ def main() -> int:
         not config.admin_inicial_nombre
         or not config.admin_inicial_correo
         or not config.admin_inicial_contrasena
+        or not config.docente_password
     ):
         print(
-            "Error: defina ADMIN_INICIAL_NOMBRE, ADMIN_INICIAL_CORREO y ADMIN_INICIAL_CONTRASENA",
+            "Error: defina ADMIN_INICIAL_NOMBRE, ADMIN_INICIAL_CORREO, ADMIN_INICIAL_CONTRASENA "
+            "y DOCENTE_PASSWORD en el .env",
+            file=sys.stderr,
+        )
+        return 2
+    if MARCADOR_SECRETO in (config.admin_inicial_contrasena, config.docente_password):
+        print(
+            f"Error: ADMIN_INICIAL_CONTRASENA o DOCENTE_PASSWORD siguen en {MARCADOR_SECRETO}. "
+            "Escriba contraseñas propias en el .env antes de ejecutar el seed.",
             file=sys.stderr,
         )
         return 2
@@ -338,7 +346,7 @@ def main() -> int:
         )
         usuarios_creados += int(creado)
 
-        docente_password = os.getenv("DOCENTE_PASSWORD", "DocenteInterNos123!")
+        docente_password = config.docente_password
         docente1, creado = asegurar_usuario(
             db,
             f"docente1@{config.dominio_institucional}",

@@ -7,7 +7,7 @@ from app.core.security import (
     verificar_jwt,
 )
 
-CLAVE = "AdminInterNos123!"
+CLAVE = "Clave-solo-para-pruebas-1"
 
 
 def test_hash_valido_verifica_true() -> None:

@@ -3,14 +3,13 @@
 Uso (una línea):
     python scripts/reset_passwords.py
 
-Lee de la configuración (.env), sin imprimirlas:
+Lee de la configuración (.env), sin imprimirlas nunca:
     - administrador: ADMIN_INICIAL_CORREO / ADMIN_INICIAL_CONTRASENA
     - docentes:      docente1@ y docente2@ <DOMINIO_INSTITUCIONAL> con DOCENTE_PASSWORD
-                     (si no está definida, el mismo valor por defecto que usa seed.py)
+Se niega a ejecutarse si falta alguna o si siguen con el marcador CAMBIAR-EN-PRODUCCION.
 Solo actualiza usuarios que ya existen; no crea ninguno.
 """
 
-import os
 import sys
 
 from dotenv import load_dotenv
@@ -19,7 +18,7 @@ from sqlalchemy import select
 load_dotenv()
 
 from app.core.clock import ahora  # noqa: E402
-from app.core.config import obtener_configuracion  # noqa: E402
+from app.core.config import MARCADOR_SECRETO, obtener_configuracion  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.security import hash_contrasena, verificar_contrasena  # noqa: E402
 from app.modules.auth.models import Usuario  # noqa: E402
@@ -27,11 +26,26 @@ from app.modules.auth.models import Usuario  # noqa: E402
 
 def main() -> int:
     config = obtener_configuracion()
-    if not config.admin_inicial_correo or not config.admin_inicial_contrasena:
-        print("Error: defina ADMIN_INICIAL_CORREO y ADMIN_INICIAL_CONTRASENA", file=sys.stderr)
+    if (
+        not config.admin_inicial_correo
+        or not config.admin_inicial_contrasena
+        or not config.docente_password
+    ):
+        print(
+            "Error: defina ADMIN_INICIAL_CORREO, ADMIN_INICIAL_CONTRASENA y DOCENTE_PASSWORD "
+            "en el .env",
+            file=sys.stderr,
+        )
+        return 2
+    if MARCADOR_SECRETO in (config.admin_inicial_contrasena, config.docente_password):
+        print(
+            f"Error: ADMIN_INICIAL_CONTRASENA o DOCENTE_PASSWORD siguen en {MARCADOR_SECRETO}. "
+            "Escriba contraseñas propias en el .env; no se cambió nada.",
+            file=sys.stderr,
+        )
         return 2
 
-    docente_clave = os.getenv("DOCENTE_PASSWORD", "DocenteInterNos123!")
+    docente_clave = config.docente_password
     objetivo = {
         config.admin_inicial_correo.lower(): config.admin_inicial_contrasena,
         f"docente1@{config.dominio_institucional}".lower(): docente_clave,
