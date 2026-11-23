@@ -8,6 +8,38 @@ Backend FastAPI del simulador de casos academicos de Psicologia Social.
 - Docker Desktop con Docker Compose
 - MySQL 8 para pruebas
 
+## Primeros pasos
+
+1. Copiar la configuración de ejemplo (`.env` no se versiona):
+
+   ```powershell
+   cp .env.example .env
+   ```
+
+2. Rellenar en `.env` los secretos propios: `ADMIN_INICIAL_CONTRASENA`, `DOCENTE_PASSWORD`,
+   `JWT_SECRET` y `FERNET_KEY` (los comandos para generarlos están en `.env.example`). Mientras
+   valgan `CAMBIAR-EN-PRODUCCION`, el seed y el reseteo se niegan a ejecutarse.
+3. Aplicar las migraciones:
+
+   ```powershell
+   alembic upgrade head
+   ```
+
+4. Crear los datos de demostración:
+
+   ```powershell
+   python scripts/seed.py
+   ```
+
+5. Reafirmar las contraseñas del administrador y de los docentes tras cambiar el `.env`
+   (muestra solo `OK` / `FALLA` / `NO EXISTE`, nunca las contraseñas):
+
+   ```powershell
+   python scripts/reset_passwords.py
+   ```
+
+Más detalle sobre secretos y su rotación en `docs/DECISIONES.md` (sección «Credenciales y secretos»).
+
 ## Levantar desde cero
 
 1. Clonar el repositorio y entrar en la carpeta.

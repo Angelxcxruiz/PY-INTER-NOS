@@ -108,6 +108,37 @@ hash. `POST /auth/forgot-password` responde siempre igual.
 - **Hora de Bogotá solo al mostrar.** El formulario de agenda interpreta lo escrito como hora de
   Bogotá (UTC-5, sin horario de verano) y envía UTC a la API.
 
+## Credenciales y secretos
+
+- **Nunca van en el repositorio.** `.env.example` solo trae el marcador `CAMBIAR-EN-PRODUCCION`
+  (o valores vacíos) en `JWT_SECRET`, `FERNET_KEY`, `ADMIN_INICIAL_CONTRASENA` y `DOCENTE_PASSWORD`.
+  Cada entorno genera los suyos en su `.env`, que está en `.gitignore` y no está versionado.
+- **Sin valores por defecto en el código de los scripts.** `scripts/seed.py` y
+  `scripts/reset_passwords.py` leen las contraseñas de `obtener_configuracion()` (`.env`), no las
+  imprimen y se niegan a ejecutarse si faltan o siguen en `CAMBIAR-EN-PRODUCCION`.
+- **Por qué:** el repositorio es público. Un secreto que alguna vez estuvo en él debe darse por
+  conocido, aunque después se borre (queda en el historial de git).
+- **Cómo generar los secretos:**
+  - `JWT_SECRET`: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+  - `FERNET_KEY`: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- **Cómo rotarlos:**
+  1. `ADMIN_INICIAL_CONTRASENA` / `DOCENTE_PASSWORD`: cambiar el valor en `.env` y ejecutar
+     `python scripts/reset_passwords.py`. No requiere reiniciar la base.
+  2. `JWT_SECRET`: cambiar en `.env` y reiniciar la API. Todas las sesiones abiertas se cierran
+     (los tokens firmados con la clave anterior dejan de ser válidos).
+  3. `FERNET_KEY`: cambiar en `.env` y reiniciar API y worker. Los códigos de convocatoria ya
+     guardados quedan ilegibles (siguen validando por su hash, pero «Ver código» falla). Se
+     regeneran con `python scripts/rotar_codigos.py` (`--simular` solo lista las afectadas):
+     imprime los códigos nuevos una sola vez, junto al correo, y no envía correos.
+  4. Si un secreto estuvo expuesto, rotarlo siempre; borrarlo del archivo no basta.
+- **Validación de arranque:** `app/core/config.py` ya no tiene valores por defecto para `JWT_SECRET`
+  ni `FERNET_KEY`. La API (y los scripts y Alembic, que usan la misma configuración) no arranca
+  si faltan, si valen `CAMBIAR-EN-PRODUCCION` o un valor de ejemplo/publicado conocido, o si la
+  clave Fernet no tiene formato válido. El mensaje explica cómo generarlas y los errores de
+  validación no imprimen los valores (`hide_input_in_errors`). Lo cubre
+  `tests/test_config_secretos.py`. `DATABASE_URL` conserva un valor por defecto de desarrollo
+  (usuario `inter_nos`, sin secretos de producción).
+
 ## Limitaciones conocidas
 
 - La lista de convocados del docente no trae correo ni nombre (`ConvocatoriaSalida` solo expone
