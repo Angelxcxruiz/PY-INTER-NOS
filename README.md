@@ -70,6 +70,25 @@ uvicorn app.main:app --reload
 
 Documentacion: `http://localhost:8000/docs`
 
+## Interfaz web (simulador)
+
+La misma instancia de `uvicorn` sirve la interfaz. No requiere Node ni compilar nada.
+
+```powershell
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+| Pantalla | URL |
+| --- | --- |
+| Ingreso (estudiante / docente / admin) | `http://localhost:8000/app/` |
+| Panel del docente | `http://localhost:8000/app/docente` |
+| Simulador del estudiante | `http://localhost:8000/app/simulador` |
+| Puntuación final | `http://localhost:8000/app/resultado` |
+
+Para probarlo de punta a punta: `python scripts/seed.py`, entrar como docente, agendar una sesión,
+convocar a un estudiante, iniciarla, copiar el código y entrar como estudiante en otra pestaña.
+Desde el celular, abre `http://<IP-de-tu-PC>:8000/app/` (misma red Wi-Fi).
+
 ## Pruebas y calidad
 
 ```powershell

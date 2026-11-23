@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Ingresar · Inter Nos{% endblock %}
+{% block clase_body %}pantalla-inicio{% endblock %}
+
+{% block cuerpo %}
+<main class="contenedor contenedor-estrecho centrado-vertical">
+  <header class="marca aparece">
+    <span class="marca-icono" aria-hidden="true">◈</span>
+    <h1>Inter Nos</h1>
+    <p class="subtitulo">Simulador de casos de Psicología Social</p>
+  </header>
+
+  <section class="tarjeta elevada aparece" aria-labelledby="titulo-ingreso">
+    <h2 id="titulo-ingreso" class="titulo-tarjeta">¿Quién eres?</h2>
+
+    <div class="pestanas" role="tablist" aria-label="Tipo de ingreso">
+      <button type="button" class="pestana activa" role="tab" aria-selected="true"
+              data-modo="estudiante">🎮 Estudiante</button>
+      <button type="button" class="pestana" role="tab" aria-selected="false"
+              data-modo="docente">🎓 Docente / Admin</button>
+    </div>
+
+    <form id="formulario-login" novalidate autocomplete="on">
+      <label class="campo">
+        <span>Correo institucional</span>
+        <input type="email" id="correo" name="correo" inputmode="email"
+               autocomplete="username" required placeholder="nombre@universidad.edu">
+      </label>
+      <label class="campo" id="campo-secreto">
+        <span id="etiqueta-secreto">Código de la convocatoria</span>
+        <input type="password" id="secreto" name="secreto" autocomplete="off" required>
+      </label>
+      <p class="ayuda" id="ayuda-secreto">
+        Tu docente te envió el código por correo cuando te convocó a la sesión.
+      </p>
+      <button type="submit" class="boton boton-grande boton-principal" id="boton-ingresar">
+        ENTRAR
+      </button>
+    </form>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/app/static/login.js?v={{ version }}"></script>
+{% endblock %}

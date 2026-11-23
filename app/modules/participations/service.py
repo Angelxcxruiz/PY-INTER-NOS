@@ -2,7 +2,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.orm import Session
 
-from app.core.clock import Reloj, ahora
+from app.core.clock import Reloj, ahora, como_utc
 from app.core.config import obtener_configuracion
 from app.core.exceptions import (
     ErrorConflicto,
@@ -107,7 +107,7 @@ class ServicioParticipaciones:
 
         vigente = self.repositorio.en_progreso_convocatoria(convocatoria_id)
         if vigente is not None:
-            if vigente.vence_en <= momento:
+            if como_utc(vigente.vence_en) <= momento:
                 return self._expirar_participacion(vigente, momento)
             return vigente
 
@@ -214,7 +214,7 @@ class ServicioParticipaciones:
         momento = self.momento()
         if participacion.estado != "EN_PROGRESO":
             raise ErrorConflicto("La participacion ya esta cerrada")
-        if momento > participacion.vence_en:
+        if momento > como_utc(participacion.vence_en):
             return self._expirar_participacion(participacion, momento)
 
         sesion_modelo = self.servicio_sesiones.obtener_sesion_para_participacion(
@@ -269,7 +269,7 @@ class ServicioParticipaciones:
             raise ErrorConflicto("La participacion ya esta cerrada")
 
         momento = self.momento()
-        if momento > participacion.vence_en:
+        if momento > como_utc(participacion.vence_en):
             resultado = self._expirar_participacion(participacion, momento)
             resultado["estado"] = "EXPIRADA"
             return resultado

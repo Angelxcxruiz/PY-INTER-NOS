@@ -83,7 +83,36 @@ hash. `POST /auth/forgot-password` responde siempre igual.
 - `EMAIL_BACKEND` desconocido ahora falla con un error claro en lugar de enviar a consola, y el
   correo lleva remitente (`SMTP_REMITENTE`).
 
+## Fase 10 — Simulador jugable servido por FastAPI
+
+- **Un solo proceso.** `uvicorn app.main:app --host 0.0.0.0 --port 8000` sirve la API (`/api/v1`) y
+  la interfaz (`/app`). Se descartaron React, Node y bundlers: la interfaz se explica y se sustenta
+  sin herramientas adicionales. La raíz `/` redirige a `/app/`.
+- **Mobile-first.** Se diseñó primero para pantalla pequeña porque la docente entra desde el celular.
+- **El tiempo lo manda el servidor.** El temporizador se ancla a `segundos_restantes` de cada
+  respuesta del servidor y se resincroniza cada 20 s y al volver a la pestaña; el navegador solo cuenta
+  hacia atrás entre dos respuestas. Al llegar a cero consulta al servidor antes de cerrar.
+- **RF-14.** Durante el juego solo se usa `GET /cases/{id}/vista-estudiante`, que no trae
+  `es_correcta` ni `justificacion`. La corrección se muestra únicamente en `/app/resultado`.
+- **`caso_id` en el token del estudiante (cambio autorizado en M1).** El estudiante no tenía forma de
+  saber qué caso jugar (`GET /sessions/{id}` es solo para docentes). El validador de M3 ya devolvía
+  `caso_id`; ahora `login_estudiante` lo incluye en el JWT junto con `convocatoria_id` y `sesion_id`.
+  No cambia ninguna regla de acceso.
+- **Corrección en M4 (autorizada).** MySQL devuelve los `DATETIME` sin zona y el reloj `ahora()` los
+  trae en UTC; `POST /participations/start/{id}` fallaba con `TypeError` al compararlos. Se normalizan
+  con `como_utc()` en las comparaciones y en `calculos.py`, sin cambiar ninguna regla. Lo cubre
+  `tests/test_participaciones_mysql.py`, que corre el flujo completo contra MySQL.
+- **Seguridad de la interfaz.** Todo el texto que viene de la API entra por `textContent` (nunca
+  `innerHTML`), así que un nombre o enunciado con HTML no se ejecuta. Los recursos estáticos llevan
+  `?v=<marca de tiempo>` para que un cambio no se quede en la caché del navegador.
+- **Hora de Bogotá solo al mostrar.** El formulario de agenda interpreta lo escrito como hora de
+  Bogotá (UTC-5, sin horario de verano) y envía UTC a la API.
+
 ## Limitaciones conocidas
+
+- La lista de convocados del docente no trae correo ni nombre (`ConvocatoriaSalida` solo expone
+  `estudiante_id`). La interfaz los muestra si los conoce (el administrador los consulta en
+  `/admin/users`; el docente, los que convocó en esta pestaña) y si no, muestra el final del id.
 
 - El flujo completo con MySQL real depende de Docker o de una instancia disponible.
 - El despliegue AWS queda documentado, pero no se ejecutó en esta fase.

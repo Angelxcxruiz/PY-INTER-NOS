@@ -11,7 +11,7 @@ from app.core.clock import ahora
 from app.core.config import obtener_configuracion
 from app.core.database import SessionLocal
 from app.core.exceptions import ErrorDominio, NoAutenticado
-from app.core.security import descifrar, hash_contrasena, hash_token
+from app.core.security import descifrar, hash_contrasena, hash_token, verificar_jwt
 from app.modules.auth.models import Usuario, VerificacionCorreo
 from app.modules.auth.service import ServicioUsuarios
 from app.modules.cases.models import Caso
@@ -421,6 +421,26 @@ def test_login_de_estudiante_muestra_el_aviso_de_verificacion(
 
     assert respuesta.status_code == 401
     assert "verificar tu correo" in respuesta.json()["error"]["mensaje"]
+
+
+def test_token_de_estudiante_incluye_el_caso_de_la_sesion(
+    cliente, db, limpieza, sesion_en_curso
+) -> None:
+    docente, sesion = sesion_en_curso
+    correo = _correo()
+    convocatoria, estudiante = _convocar(db, docente, sesion, correo)
+    limpieza.append(estudiante.id)
+
+    respuesta = cliente.post(
+        "/api/v1/auth/student-login",
+        json={"correo": correo, "codigo": descifrar(convocatoria.codigo_cifrado)},
+    )
+
+    assert respuesta.status_code == 200
+    datos = verificar_jwt(respuesta.json()["token_acceso"])
+    assert datos["caso_id"] == sesion.caso_id
+    assert datos["convocatoria_id"] == convocatoria.id
+    assert datos["sesion_id"] == sesion.id
 
 
 def test_reprocesar_el_evento_no_envia_dos_correos(cliente, db, adapter, limpieza) -> None:

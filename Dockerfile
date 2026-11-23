@@ -17,6 +17,7 @@ RUN useradd --create-home --uid 10001 appuser
 COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=build /usr/local/bin /usr/local/bin
 COPY app ./app
+COPY frontend ./frontend
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY scripts ./scripts

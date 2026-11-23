@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titulo %}Simulador · Inter Nos{% endblock %}
+{% block clase_body %}pantalla-juego{% endblock %}
+
+{% block cuerpo %}
+<header class="barra-superior" id="barra-briefing">
+  <div class="barra-contenido">
+    <a class="barra-marca" href="/app/simulador"><span aria-hidden="true">◈</span> Inter Nos</a>
+    <div class="barra-acciones">
+      <span id="campana"></span>
+      <button type="button" class="boton boton-fantasma boton-chico" id="boton-salir">Salir</button>
+    </div>
+  </div>
+</header>
+
+<header class="hud oculto" id="hud" aria-label="Progreso del caso">
+  <div class="hud-contenido">
+    <div class="hud-fila">
+      <div class="hud-contador" id="hud-contador">Pregunta 1 de 1</div>
+      <div class="temporizador" id="temporizador" role="timer" aria-label="Tiempo restante">
+        <span aria-hidden="true">⏱</span>
+        <span id="tiempo">--:--</span>
+      </div>
+    </div>
+    <div class="progreso" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="0" id="progreso">
+      <div class="progreso-relleno" id="progreso-relleno"></div>
+    </div>
+  </div>
+</header>
+
+<main class="contenedor contenedor-juego" id="escena">
+  <p class="texto-suave centrado">Cargando tu caso…</p>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/app/static/simulador.js?v={{ version }}"></script>
+{% endblock %}
