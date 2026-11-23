@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block titulo %}Panel del docente · Inter Nos{% endblock %}
+{% block clase_body %}pantalla-panel{% endblock %}
+
+{% block cuerpo %}
+<header class="barra-superior">
+  <div class="barra-contenido">
+    <a class="barra-marca" href="/app/docente"><span aria-hidden="true">◈</span> Inter Nos</a>
+    <div class="barra-acciones">
+      <span id="nombre-usuario" class="texto-suave nombre-usuario"></span>
+      <span id="campana"></span>
+      <button type="button" class="boton boton-fantasma boton-chico" id="boton-salir">Salir</button>
+    </div>
+  </div>
+</header>
+
+<main class="contenedor">
+  <div id="vista-lista">
+    <nav class="pestanas pestanas-panel" role="tablist" aria-label="Secciones del panel">
+      <button type="button" class="pestana activa" role="tab" aria-selected="true"
+              data-seccion="casos">📚 Mis casos</button>
+      <button type="button" class="pestana" role="tab" aria-selected="false"
+              data-seccion="sesiones">🗓 Sesiones</button>
+    </nav>
+
+    <section id="seccion-casos" class="seccion">
+      <div class="seccion-cabecera">
+        <h2>Mis casos</h2>
+      </div>
+      <div id="lista-casos" class="rejilla"></div>
+    </section>
+
+    <section id="seccion-sesiones" class="seccion oculto">
+      <div class="seccion-cabecera">
+        <h2>Sesiones</h2>
+        <button type="button" class="boton boton-principal boton-chico" id="boton-agendar">
+          + Agendar
+        </button>
+      </div>
+      <div id="lista-sesiones" class="rejilla"></div>
+    </section>
+  </div>
+
+  <div id="vista-detalle" class="oculto"></div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/app/static/docente.js?v={{ version }}"></script>
+{% endblock %}

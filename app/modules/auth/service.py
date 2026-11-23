@@ -137,6 +137,7 @@ class ServicioUsuarios:
                 "permisos": [],
                 "convocatoria_id": convocatoria_id,
                 "sesion_id": sesion_id,
+                "caso_id": datos.get("caso_id"),
             },
         )
         return token, usuario

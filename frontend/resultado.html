@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titulo %}Tu puntuación · Inter Nos{% endblock %}
+{% block clase_body %}pantalla-juego pantalla-resultado{% endblock %}
+
+{% block cuerpo %}
+<header class="barra-superior">
+  <div class="barra-contenido">
+    <a class="barra-marca" href="/app/resultado"><span aria-hidden="true">◈</span> Inter Nos</a>
+    <div class="barra-acciones">
+      <span id="campana"></span>
+      <button type="button" class="boton boton-fantasma boton-chico" id="boton-salir">Salir</button>
+    </div>
+  </div>
+</header>
+
+<main class="contenedor contenedor-juego" id="escena">
+  <p class="texto-suave centrado">Calculando tu puntuación…</p>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/app/static/resultado.js?v={{ version }}"></script>
+{% endblock %}

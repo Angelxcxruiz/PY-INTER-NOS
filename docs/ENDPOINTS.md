@@ -38,6 +38,9 @@ Ejemplo:
 }
 ```
 
+El token del estudiante (rol `ESTUDIANTE`) trae en sus claims `convocatoria_id`, `sesion_id` y
+`caso_id`; la interfaz los usa para saber qué caso jugar.
+
 ### Verificacion de correo del estudiante
 
 - `POST /api/v1/auth/verificar-correo` (publico): `{"token": "..."}`. Token invalido, usado o
@@ -165,3 +168,9 @@ Ejemplo de respuesta:
 - `GET /api/v1/espacios-academicos/{espacio_id}/estadisticas`
 - `GET /api/v1/sessions/{sesion_id}/reports/participation.csv`
 - `GET /api/v1/sessions/{sesion_id}/reports/answers.csv`
+
+## Interfaz web (fuera de `/api/v1`, no aparece en Swagger)
+
+- `GET /` redirige a `/app/`.
+- `GET /app/` (ingreso), `/app/docente`, `/app/simulador` y `/app/resultado`: páginas HTML.
+- `GET /app/static/*`: CSS y JS de la interfaz.

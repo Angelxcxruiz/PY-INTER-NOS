@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0a1a">
+  <title>{% block titulo %}{{ titulo_app }}{% endblock %}</title>
+  <link rel="stylesheet" href="/app/static/estilos.css?v={{ version }}">
+</head>
+<body class="{% block clase_body %}{% endblock %}">
+  {% block cuerpo %}{% endblock %}
+
+  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
+
+  <script src="/app/static/ui.js?v={{ version }}"></script>
+  <script src="/app/static/api.js?v={{ version }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
