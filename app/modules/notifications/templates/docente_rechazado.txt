@@ -1,0 +1,9 @@
+Tu solicitud de cuenta de docente
+
+Hola {{ nombre }}.
+
+El administrador no aprobó tu solicitud de cuenta de docente en Inter Nos, por lo que no podrás iniciar sesión con ella.
+{% if motivo %}
+Motivo indicado: {{ motivo }}
+{% endif %}
+Si crees que es un error, comunícate con el administrador de tu institución.

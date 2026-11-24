@@ -48,8 +48,8 @@ def main() -> int:
     docente_clave = config.docente_password
     objetivo = {
         config.admin_inicial_correo.lower(): config.admin_inicial_contrasena,
-        f"docente1@{config.dominio_institucional}".lower(): docente_clave,
-        f"docente2@{config.dominio_institucional}".lower(): docente_clave,
+        f"docente1@{config.dominio_principal}".lower(): docente_clave,
+        f"docente2@{config.dominio_principal}".lower(): docente_clave,
     }
 
     with SessionLocal() as db:

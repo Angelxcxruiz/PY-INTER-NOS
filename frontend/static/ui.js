@@ -219,7 +219,11 @@ const Campana = {
   },
 
   async abrir() {
-    const lista = Dom.h("div", { clase: "lista-notificaciones" }, Dom.h("p", { clase: "texto-suave" }, "Cargando…"));
+    const lista = Dom.h(
+      "div",
+      { clase: "lista-notificaciones" },
+      Dom.h("p", { clase: "texto-suave" }, Dom.h("span", { clase: "icono-carga" }), " Cargando…"),
+    );
     const hoja = Modal.hoja("Notificaciones", lista);
     try {
       const notificaciones = await Api.get("/notificaciones", { limite: 30 });

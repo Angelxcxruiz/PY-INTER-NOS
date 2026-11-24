@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import ahora
 from app.core.config import obtener_configuracion
+from app.core.database import bloquear_filas_omitiendo_bloqueadas
 from app.modules.notifications.despachador import DespachadorEventos
 from app.modules.notifications.models import EventoOutbox
 
@@ -37,8 +38,8 @@ class ProcesadorOutbox:
             )
             .order_by(EventoOutbox.creado_en)
             .limit(limite)
-            .with_for_update(skip_locked=True)
         )
+        stmt = bloquear_filas_omitiendo_bloqueadas(stmt, self.db)
         eventos = list(self.db.scalars(stmt).all())
         procesados = 0
 

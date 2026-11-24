@@ -139,6 +139,168 @@ hash. `POST /auth/forgot-password` responde siempre igual.
   `tests/test_config_secretos.py`. `DATABASE_URL` conserva un valor por defecto de desarrollo
   (usuario `inter_nos`, sin secretos de producción).
 
+## Fase 11 — Registro de usuarios con aprobación de docentes (requisito NUEVO)
+
+> **No es parte del diseño original.** La especificación decía que el administrador crea a los
+> docentes y que el estudiante solo entra con el código de la convocatoria. El equipo aprobó este
+> autorregistro como ampliación posterior.
+
+| Rol | Cómo se crea | Aprobación |
+|---|---|---|
+| ESTUDIANTE | Se registra solo desde `/app/registro` | Ninguna (tras verificar su correo) |
+| DOCENTE | Se registra solo desde `/app/registro` | El administrador debe aprobarlo |
+| ADMINISTRADOR | Solo por seed o por otro administrador | — |
+
+- **Migración `0010_registro`:** `usuario.estado_cuenta` (`ACTIVO` por defecto, así los usuarios
+  existentes no cambian), `aprobado_en`, `aprobado_por_id` (FK a `usuario`), `motivo_rechazo` y un
+  `CHECK` sobre los estados.
+- **Docente pendiente:** inicia sesión (para ver su estado) pero el token trae `estado_cuenta` y
+  `permisos` vacíos; `obtener_sesion` responde 403 «Tu cuenta está en revisión…» en casos, sesiones
+  y reportes. Un `RECHAZADO` recibe 401 `CUENTA_RECHAZADA`.
+- **Solicitudes:** `GET /admin/solicitudes` (paginado, cabecera `X-Total-Count`), `aprobar`
+  (opcionalmente con permisos; idempotente) y `rechazar` (motivo opcional). Aprobar o rechazar
+  publica `DOCENTE_APROBADO` / `DOCENTE_RECHAZADO` y se envía correo al docente.
+- **Endurecimiento relacionado (M4):** un estudiante con contraseña ya puede iniciar sesión, así que
+  `_verificar_estudiante_convocatoria` exige que el `convocatoria_id` del token coincida con la
+  convocatoria. Sin código de convocatoria no se juega; la pantalla «Únete a una sesión» lo pide.
+- **Correo duplicado:** 409 con el mismo mensaje sin importar el rol del correo existente.
+
+## Fase 11b — Verificación del registro por código y dominio configurable (requisito NUEVO)
+
+> Tampoco figura en la especificación original. Sustituye el efecto inmediato del registro de la
+> Fase 11: la cuenta no sirve hasta verificar el correo.
+
+- **Flujo:** `POST /auth/registro` crea la cuenta `SIN_VERIFICAR` (sin permisos ni acceso) y publica
+  `REGISTRO_INICIADO`; el correo lleva un código de 6 dígitos. `POST /auth/registro/verificar` la
+  pasa a `ACTIVO` (estudiante) o `PENDIENTE` (docente, que luego aprueba el administrador) y publica
+  `REGISTRO_VERIFICADO`. `POST /auth/registro/reenviar` responde siempre lo mismo.
+- **Migración `0011_verificacion_registro`:** tabla `codigo_registro` (`id`, `usuario_id` FK con
+  `ON DELETE CASCADE`, `codigo_hash` indexado, `expira_en`, `intentos`, `usado_en`, `creada_en`) y
+  `CHECK` de `estado_cuenta` ampliado con `SIN_VERIFICAR`. Los usuarios existentes siguen `ACTIVO`.
+- **Seguridad del código:** numérico de 6 dígitos con `secrets`; en la base solo se guarda un HASH
+  (HMAC-SHA256 con clave derivada de `JWT_SECRET` y ligado al usuario: con solo 10^6 posibilidades,
+  un SHA-256 simple se rompería por fuerza bruta si se filtrara la tabla). La comparación usa
+  `hmac.compare_digest`; el código se gasta una vez (`usado_en`); vigencia
+  `CODIGO_REGISTRO_EXPIRA_MIN` (15), máximo `CODIGO_REGISTRO_MAX_INTENTOS` (5) intentos y un reenvío
+  cada `CODIGO_REGISTRO_COOLDOWN_SEG` (60). Todos los fallos (código incorrecto, vencido, usado,
+  agotado o correo inexistente) dan el mismo 400 `CODIGO_INVALIDO`, sin revelar si el correo existe.
+- **Desviación consciente de lo pedido** («se descifra al construir el correo»): el código no se
+  cifra, se genera al construir el correo y de inmediato se guarda solo su hash. Así ni siquiera
+  hay algo descifrable en la base. El payload del outbox lleva solo ids
+  (`usuario_id`, `codigo_registro_id`); `publicar()` ya rechaza claves como `codigo`.
+- **Respuesta de registro:** `{usuario_id, correo, mensaje, vigencia_segundos, reenvio_segundos}`.
+  Las dos cifras no son secretas y permiten dibujar los contadores; jamás va el código.
+- **Un solo código activo por usuario:** se garantiza en el servicio (borra y crea), no con una
+  restricción única en la base.
+- **Eventos:** `REGISTRO_VERIFICADO` avisa a todos los administradores cuando el rol es DOCENTE.
+  Sustituye a `DOCENTE_REGISTRADO` (de la Fase 11), que ya no se publica pero su suscripción se
+  conserva por si hubiera eventos antiguos en el outbox.
+- **Login:** una cuenta `SIN_VERIFICAR` recibe 401 `CORREO_SIN_VERIFICAR` (solo tras acertar la
+  contraseña) con `detalles.verificar` / `detalles.reenviar`; el frontend la lleva a
+  `/app/registro?verificar=<correo>`.
+- **Dominio institucional:** `DOMINIO_INSTITUCIONAL` es obligatorio (la API no arranca sin él),
+  admite una lista separada por comas y acepta el dominio **y sus subdominios** (`edu.co` vale para
+  cualquier `@universidad.edu.co`). Se exige **solo a los estudiantes**: el docente puede registrarse
+  con cualquier correo (decisión del equipo), porque igual pasa por verificación de correo y por la
+  aprobación del administrador. Lo lee `ServicioUsuarios._dominio_permitido`, la única
+  validación, usada por el registro, el login de estudiante y el alta de estudiantes por el
+  administrador (`tests/test_dominio.py` lo comprueba). Dominios parecidos
+  (`evil-edu.co`, `unihumboldt.edu.co.malo.com`) se rechazan.
+- **Ver el código en local (sin Mailpit):** `EMAIL_BACKEND=console` imprime el correo completo en la
+  terminal de la API (con `DESPACHO_INMEDIATO=true`) o del worker. Solo para desarrollo.
+- **Límites conocidos:** no hay limitación de tasa ni captcha en el registro público (se pueden
+  crear cuentas sin verificar y enviar correos masivamente); lo mitigan el cooldown por cuenta y la
+  verificación obligatoria, pero para producción conviene un límite por IP (p. ej. en el ALB/WAF).
+
+## Fase 11c — Panel completo del docente (ampliación)
+
+- **Editor de casos en la interfaz** (`docente_casos.js`): crear caso, escenarios, preguntas con
+  opciones y justificación, rúbrica (generada automáticamente: un criterio por escenario con pesos
+  que suman 100, editable), lista de verificación en vivo y publicación. Un caso publicado no se
+  edita: se crea una nueva versión. Las reglas siguen en el servidor (`/cases`).
+- **Códigos independientes por estudiante:** al asignar un caso (agendar sesión + convocar), cada
+  estudiante recibe su propio código por correo; el docente puede verlo, copiarlo (todos a la vez),
+  reenviar el correo, regenerarlo o quitar al estudiante. El detalle muestra nombre y correo reales
+  (salen de `/sessions/{id}/seguimiento`) y el estado del correo (`/entregas`).
+- **Resultados** (`docente_resultados.js`): seguimiento en vivo (se actualiza cada 15 s con la sesión
+  en curso), estadísticas, acierto por pregunta y criterio, detalle por estudiante, retroalimentación,
+  autorización de un nuevo intento y descarga de los CSV.
+- **Correcciones del servidor que esto requirió** (hallazgos de la auditoría):
+  - El docente dueño de la sesión (o el admin) ya puede leer el resultado de sus estudiantes
+    (`/participations/{id}/result`, `/convocatorias/{id}/result`); antes daba 403. Otro docente: 403.
+  - El estudiante ve la retroalimentación del docente en su resultado (`retroalimentacion`).
+  - `/cases/publicados` exige sesión y ya no devuelve la opción correcta ni su justificación.
+  - Autorizar una repetición solo es posible con la sesión `EN_CURSO`.
+  - `cerrar_sesiones_vencidas` reutilizaba la variable `cerradas` (lista y contador) y fallaba.
+  - Compatibilidad con MariaDB anterior a 10.6 (XAMPP): `FOR UPDATE SKIP LOCKED` solo donde existe
+    (`bloquear_filas_omitiendo_bloqueadas`); sin esto el outbox, y por tanto los correos, no corría.
+
+## Fase 12 — Triggers y vistas en la base de datos (requisito académico independiente)
+
+> Lo exige el profesor de Bases de Datos. No forma parte de los requisitos funcionales del
+> simulador ni del diseño original: es una capa adicional a nivel de motor.
+
+- **Principio:** los servicios en Python siguen validando todo. Los triggers son una **segunda red
+  de seguridad** dentro de MySQL (si alguien escribe directo en la base o un servicio olvida una
+  regla), no un reemplazo. Todo está en la migración `0012_triggers_vistas` (`upgrade` y `downgrade`
+  completos, con `op.execute()` y SQL crudo).
+- **Triggers (9 sobre 4 reglas):**
+  1. *Auditoría de calificaciones* — `trg_calificacion_after_insert|update|delete` escriben en
+     `auditoria_calificacion` (acción, nota anterior y nueva, `CURRENT_USER()`, fecha UTC). Son
+     `AFTER` y no `BEFORE` porque la bitácora solo debe registrar lo que de verdad quedó aplicado:
+     un `BEFORE` corre antes de comprobar `CHECK` y llaves y dejaría huella de una operación que la
+     fila luego rechaza. La tabla no tiene llave foránea a `calificacion` para que el registro de
+     un borrado sobreviva a la fila borrada. El `UPDATE` solo audita si cambia `nota_final`.
+  2. *Una sola opción correcta* — `trg_opcion_validar_correcta_insert|update` (`BEFORE`) lanzan
+     `SIGNAL SQLSTATE '45000'` con «La pregunta ya tiene una opción correcta». En el `UPDATE` se
+     excluye la propia fila (`id <> NEW.id`) para que no se bloquee a sí misma. El manejador de
+     errores (`error_handlers.py`) traduce ese error (código MySQL 1644) a un `409`
+     `REGLA_DE_BASE_DE_DATOS`; cualquier otro error de base sigue siendo un `500` genérico.
+  3. *Progreso automático* — `trg_respuesta_after_insert|update|delete` llaman al procedimiento
+     `sp_recalcular_progreso`, que cuenta las respuestas, calcula el total de preguntas del caso de
+     la sesión y hace `INSERT ... ON DUPLICATE KEY UPDATE` en `progreso_participacion`. El
+     procedimiento evita repetir el mismo cálculo en tres triggers.
+  4. *Fecha de cierre* — `trg_participacion_before_update` llena `finalizada_en` con
+     `UTC_TIMESTAMP(6)` al pasar a `FINALIZADA`, `EXPIRADA` o `CERRADA_POR_SESION` si estaba vacía;
+     nunca pisa un valor existente.
+- **Vistas (5):** `vista_notas_por_sesion` (una fila por convocado, incluye a quien no participó con
+  nota `NULL`), `vista_convocados_estado`, `vista_estadisticas_por_criterio` (porcentaje `NULL` sin
+  respuestas, con `NULLIF`; solo cuenta participaciones cerradas), `vista_participaciones_detalle`
+  (solo lectura, para RF-15; usa `DISTINCT` para que MySQL la trate como no actualizable) y
+  `vista_resumen_docente`. Cada una lleva en la migración un comentario de qué resuelve.
+- **Limitaciones de MySQL que conviene saber:**
+  - Los borrados en **cascada** por llave foránea **no disparan triggers**: borrar una sesión borra
+    sus calificaciones sin dejar auditoría. Por eso `progreso_participacion` tiene su propio
+    `ON DELETE CASCADE`.
+  - Con el registro binario activo, crear triggers o procedimientos sin `SUPER` exige
+    `log_bin_trust_function_creators=1`. Está en `docker-compose.yml` (flag `--log-bin-trust-function-creators=1`),
+    en `ci.yml` (`SET GLOBAL` antes de migrar) y debe ir en el *parameter group* de RDS
+    (`docs/DESPLIEGUE_AWS.md`). Sin eso la migración falla con el error 1419.
+  - El progreso que calcula Python (`ServicioParticipaciones._progreso`) se conserva para el
+    endpoint; `progreso_participacion` y las vistas son la fuente a nivel de base de datos.
+- **Pruebas:** `tests/test_bd_triggers_vistas.py` (marcador `integracion`, MySQL real): cada trigger,
+  cada vista, el 409 del manejador y la ida y vuelta `downgrade 0011` → `upgrade head`.
+
+## Paleta del logo (interfaz)
+
+Las variables de `:root` en `frontend/static/estilos.css` son la **única** fuente de color
+(`tests/test_frontend.py` verifica que no haya hex ni `rgb()` con números sueltos fuera de `:root`).
+El logo tiene fondo azul-violeta oscuro y dos perfiles entrelazados:
+
+| Familia | Colores | Se usa para |
+|---|---|---|
+| Cálida | ámbar → naranja (`--degradado-calido`, alias `--acento*`) | avance (`--degradado-avance`: barra de progreso), respuestas acertadas (`--ok`), botones de acción principal, temporizador en cuenta atrás (ámbar, luego naranja y rojo al agotarse) |
+| Fría | turquesa → cian (`--degradado-frio`, alias `--neon*`) | contexto, información, retroalimentación, datos del estudiante, estados neutros, botones secundarios informativos (`.boton-info`) |
+
+Textos sobre los degradados: `--sobre-acento` (cálido) y `--sobre-frio` (frío), oscuros por contraste.
+Colores con transparencia: `rgb(var(--acento-rgb) / alfa)`. Cambiar la paleta es tocar solo `:root`.
+Los valores son una aproximación al logo (no se dispone del archivo original).
+
+El **símbolo del logo** (`frontend/static/logo-simbolo.svg`, dos perfiles enfrentados) es el icono
+de carga (`.boton.cargando::after` y `.icono-carga`, girando sobre un disco oscuro) y el favicon
+(`favicon.svg`, enlazado en `base.html`). Los SVG llevan sus colores incrustados porque no pueden
+leer variables CSS.
+
 ## Limitaciones conocidas
 
 - La lista de convocados del docente no trae correo ni nombre (`ConvocatoriaSalida` solo expone

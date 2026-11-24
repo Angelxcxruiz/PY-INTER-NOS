@@ -1,0 +1,8 @@
+Verifica tu correo
+
+Hola {{ nombre }}.
+
+Tu código de verificación de Inter Nos es: {{ codigo }}
+
+Vence en {{ vigencia }}. Escríbelo en la pantalla de registro para activar tu cuenta.
+Si no fuiste tú, ignora este mensaje y nadie podrá usar tu correo.

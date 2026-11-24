@@ -78,6 +78,23 @@ def hash_codigo(codigo: str) -> str:
     return hashlib.sha256(codigo_normalizado.encode("utf-8")).hexdigest()
 
 
+def generar_codigo_numerico(longitud: int = 6) -> str:
+    """Código numérico (con ceros a la izquierda permitidos), generado con `secrets`."""
+    return "".join(secrets.choice("0123456789") for _ in range(longitud))
+
+
+def hash_codigo_registro(usuario_id: str, codigo: str) -> str:
+    """Hash estable del código de registro, con clave del servidor y atado al usuario.
+
+    Un código de 6 dígitos tiene solo un millón de valores: un SHA-256 simple se rompería
+    por fuerza bruta si se filtra la base. Con HMAC y la clave del servidor no basta la base.
+    """
+    solo_digitos = "".join(caracter for caracter in codigo if caracter.isdigit())
+    clave = f"codigo-registro:{configuracion.jwt_secreto}".encode()
+    mensaje = f"{usuario_id}:{solo_digitos}".encode()
+    return hmac.new(clave, mensaje, hashlib.sha256).hexdigest()
+
+
 def comparar_hash_codigo(codigo: str, hash_guardado: str) -> bool:
     hash_calculado = hash_codigo(codigo)
     return hmac.compare_digest(hash_calculado, hash_guardado)

@@ -29,6 +29,8 @@ def construir_despachador(puerto: PuertoCorreo | None = None) -> DespachadorEven
         "SESION_INICIADA",
         "SESION_FINALIZADA",
         "RETROALIMENTACION_AGREGADA",
+        "DOCENTE_REGISTRADO",
+        "REGISTRO_VERIFICADO",
     ):
         despachador.suscribir(tipo, observador_notificacion)
     for tipo in (
@@ -37,6 +39,9 @@ def construir_despachador(puerto: PuertoCorreo | None = None) -> DespachadorEven
         "SESION_REPROGRAMADA",
         "RESTABLECIMIENTO_CONTRASENA_SOLICITADO",
         "VERIFICACION_CORREO_SOLICITADA",
+        "DOCENTE_APROBADO",
+        "DOCENTE_RECHAZADO",
+        "REGISTRO_INICIADO",
     ):
         despachador.suscribir(tipo, observador_correo)
     return despachador

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Inter Nos">
+  <defs>
+    <linearGradient id="calido" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <linearGradient id="frio" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <!-- Perfil que mira a la derecha: frente, nariz, labios, mentón y cuello. -->
+    <path id="perfil" d="M10 58 V46 C10 38 7 33 10 25 C13 14 24 7 34 9 C39 10 42 14 42 14 L47 27 L43 29 L45 33 L42 35 L43 38 C43 41 39 42 37 42 L37 47 C37 52 35 55 32 58 Z"/>
+  </defs>
+  <!-- Perfil frío (turquesa a cian): espejado y desplazado para que se crucen. -->
+  <use href="#perfil" fill="url(#frio)" transform="translate(74 4) scale(-1 1)"/>
+  <!-- Perfil cálido (ámbar a naranja) encima, con un borde del color del fondo que simula el entrelazado. -->
+  <use href="#perfil" fill="url(#calido)" stroke="#0b0c2b" stroke-width="2.6" paint-order="stroke" transform="translate(-2 -2)"/>
+</svg>

@@ -176,12 +176,25 @@ class ServicioEvaluaciones:
             self.db.commit()
         return creadas
 
+    def _participacion_visible(self, participacion_id: str, sesion: dict):
+        """El estudiante ve solo la suya; el docente, las de sus sesiones; el admin, todas."""
+        if sesion.get("rol") == "ESTUDIANTE":
+            return self.participaciones.obtener(participacion_id, sesion)
+        if sesion.get("rol") not in {"DOCENTE", "ADMINISTRADOR"}:
+            raise ErrorPermiso("No puede consultar este resultado")
+        participacion = self.participaciones.obtener_modelo(participacion_id)
+        convocatoria = self.sesiones.obtener_convocatoria_para_participacion(
+            participacion.convocatoria_id
+        )
+        self.sesiones.obtener(convocatoria.sesion_id, sesion)
+        return participacion
+
     def resultado_participacion(
         self,
         participacion_id: str,
         sesion: dict,
     ) -> dict:
-        participacion = self.participaciones.obtener(participacion_id, sesion)
+        participacion = self._participacion_visible(participacion_id, sesion)
         if participacion.estado == "EN_PROGRESO":
             raise ErrorConflicto(
                 "El resultado se habilita al finalizar la participacion",
@@ -231,12 +244,14 @@ class ServicioEvaluaciones:
         nota_aprobatoria = (
             caso.rubrica.nota_aprobatoria if caso.rubrica is not None else Decimal("0")
         )
+        retroalimentacion = self.repositorio.retroalimentacion_por_participacion(participacion_id)
         return {
             "aciertos": aciertos,
             "errores": len(preguntas) - aciertos,
             "total_preguntas": len(preguntas),
             "nota_final": calificacion.nota_final,
             "nota_aprobatoria": nota_aprobatoria,
+            "retroalimentacion": retroalimentacion.texto if retroalimentacion else None,
             "es_parcial": calificacion.es_parcial,
             "es_ausencia": calificacion.es_ausencia,
             "preguntas": detalles,
@@ -246,6 +261,8 @@ class ServicioEvaluaciones:
         convocatoria = self.sesiones.obtener_convocatoria_para_participacion(convocatoria_id)
         if sesion.get("rol") == "ESTUDIANTE" and convocatoria.estudiante_id != sesion["sub"]:
             raise ErrorPermiso("No puede consultar el resultado de otro estudiante")
+        if sesion.get("rol") != "ESTUDIANTE":
+            self.sesiones.obtener(convocatoria.sesion_id, sesion)
 
         ausencia = self.repositorio.por_convocatoria_ausencia(convocatoria_id)
         intentos = self.participaciones.obtener_intentos_finalizados(convocatoria_id)
@@ -253,11 +270,13 @@ class ServicioEvaluaciones:
             sesion_modelo = self.sesiones.obtener_sesion_para_participacion(convocatoria.sesion_id)
             caso = self._obtener_datos_caso(sesion_modelo)
             total = sum(1 for escenario in caso.escenarios for pregunta in escenario.preguntas)
+            retroalimentacion = self.repositorio.retroalimentacion_por_convocatoria(convocatoria_id)
             return {
                 "aciertos": 0,
                 "errores": total,
                 "total_preguntas": total,
                 "nota_final": ausencia.nota_final,
+                "retroalimentacion": retroalimentacion.texto if retroalimentacion else None,
                 "nota_aprobatoria": (
                     caso.rubrica.nota_aprobatoria if caso.rubrica is not None else Decimal("0")
                 ),

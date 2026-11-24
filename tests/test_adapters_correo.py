@@ -47,6 +47,7 @@ def test_smtp_incluye_remitente(monkeypatch) -> None:
             enviados.append(mensaje)
 
     monkeypatch.setattr(smtplib, "SMTP", SmtpFalso)
+    monkeypatch.setattr(obtener_configuracion(), "smtp_user", "")
     monkeypatch.setattr(obtener_configuracion(), "smtp_remitente", "no-reply@prueba.edu")
 
     SmtpAdapter().enviar("ana@prueba.edu", "Asunto", "<p>Hola</p>", "Hola")

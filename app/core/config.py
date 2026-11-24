@@ -42,10 +42,8 @@ class Configuracion(BaseSettings):
     jwt_secreto: str = Field(default="", validation_alias="JWT_SECRET")
     jwt_expira_min: int = Field(default=60, validation_alias="JWT_EXPIRA_MIN")
     fernet_key: str = Field(default="", validation_alias="FERNET_KEY")
-    dominio_institucional: str = Field(
-        default="unal.edu.co",
-        validation_alias="DOMINIO_INSTITUCIONAL",
-    )
+    # Lista separada por comas (varios dominios). Sin valor por defecto: la API no arranca sin él.
+    dominio_institucional: str = Field(default="", validation_alias="DOMINIO_INSTITUCIONAL")
     frontend_url: str = Field(default="http://localhost:3000", validation_alias="FRONTEND_URL")
     email_backend: str = Field(default="consola", validation_alias="EMAIL_BACKEND")
     smtp_host: str = Field(default="127.0.0.1", validation_alias="SMTP_HOST")
@@ -102,6 +100,43 @@ class Configuracion(BaseSettings):
         validation_alias="ADMIN_INICIAL_CONTRASENA",
     )
     docente_password: str | None = Field(default=None, validation_alias="DOCENTE_PASSWORD")
+    # Registro con verificación por código de 6 dígitos (Fase 11b).
+    codigo_registro_expira_min: int = Field(
+        default=15, ge=1, validation_alias="CODIGO_REGISTRO_EXPIRA_MIN"
+    )
+    codigo_registro_max_intentos: int = Field(
+        default=5, ge=1, validation_alias="CODIGO_REGISTRO_MAX_INTENTOS"
+    )
+    codigo_registro_cooldown_seg: int = Field(
+        default=60, ge=0, validation_alias="CODIGO_REGISTRO_COOLDOWN_SEG"
+    )
+    # Tras responder al registro, intenta enviar el correo en el mismo proceso de la API, sin
+    # esperar al worker. El outbox sigue siendo la fuente de verdad (el worker reintenta).
+    despacho_inmediato: bool = Field(default=True, validation_alias="DESPACHO_INMEDIATO")
+
+    @model_validator(mode="after")
+    def _exigir_dominio(self) -> "Configuracion":
+        if not self.dominios_permitidos:
+            raise ValueError(
+                "Configuracion incompleta: DOMINIO_INSTITUCIONAL no esta definida. "
+                "Use el dominio de su institucion, o varios separados por comas "
+                "(ej. unihumboldt.edu.co,humboldt.edu.co)."
+            )
+        return self
+
+    @property
+    def dominios_permitidos(self) -> list[str]:
+        """Dominios de correo aceptados (minúsculas, sin '@')."""
+        return [
+            dominio.strip().lstrip("@").lower()
+            for dominio in self.dominio_institucional.split(",")
+            if dominio.strip().lstrip("@")
+        ]
+
+    @property
+    def dominio_principal(self) -> str:
+        """Primer dominio de la lista: el que usan los scripts y el remitente por defecto."""
+        return self.dominios_permitidos[0]
 
     @model_validator(mode="after")
     def _exigir_secretos_propios(self) -> "Configuracion":

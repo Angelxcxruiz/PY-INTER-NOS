@@ -48,8 +48,15 @@ class ServicioParticipaciones:
             raise ErrorPermiso("Solo estudiantes pueden usar participaciones")
         if convocatoria.estudiante_id != sesion["sub"]:
             raise ErrorPermiso("La convocatoria pertenece a otro estudiante")
+        # RF-01: se participa con el código de la convocatoria. Un estudiante registrado que
+        # entró solo con contraseña no trae convocatoria_id en su token y debe ingresar el código.
+        if sesion.get("convocatoria_id") != convocatoria.id:
+            raise ErrorPermiso("Ingresa con el código de esta convocatoria para participar")
 
     def _progreso(self, participacion: Participacion) -> dict:
+        # El progreso lo calcula este método en Python para el endpoint. A nivel de base de
+        # datos la misma cifra la mantienen los triggers trg_respuesta_* en la tabla
+        # progreso_participacion (migración 0012), que es la fuente para reportes y vistas.
         respuestas = self.repositorio.respuestas(participacion.id)
         convocatoria = self.servicio_sesiones.obtener_convocatoria_para_participacion(
             participacion.convocatoria_id
@@ -331,6 +338,11 @@ class ServicioParticipaciones:
         caso = self.servicio_casos.obtener(sesion_modelo.caso_id, sesion)
         if sesion.get("rol") != "ADMINISTRADOR" and caso.docente_creador_id != sesion["sub"]:
             raise ErrorPermiso("Solo el docente creador del caso puede autorizar")
+        if sesion_modelo.estado != "EN_CURSO":
+            raise ErrorConflicto(
+                "Solo se puede autorizar una repeticion mientras la sesion esta en curso",
+                detalles={"estado_actual": sesion_modelo.estado},
+            )
 
         existente = self.repositorio.autorizacion_no_usada(convocatoria_id)
         if existente is not None:

@@ -50,6 +50,8 @@ services:
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--default-time-zone=+00:00"
+      # Los triggers y procedimientos (migración 0012) los crea un usuario sin SUPER.
+      - "--log-bin-trust-function-creators=1"
     ports:
      - "3308:3306"
     volumes:
@@ -72,6 +74,7 @@ services:
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--default-time-zone=+00:00"
+      - "--log-bin-trust-function-creators=1"
     ports:
       - "3307:3306"
     volumes:

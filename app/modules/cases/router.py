@@ -38,14 +38,16 @@ def listar_casos(
     return [CasoDocenteSalida.model_validate(caso) for caso in casos]
 
 
-@router.get("/publicados", response_model=list[CasoDocenteSalida])
+@router.get("/publicados", response_model=list[CasoEstudianteSalida])
 def listar_publicados(
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
     servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
     limite: Annotated[int, Query(ge=1, le=100)] = 20,
     desplazamiento: Annotated[int, Query(ge=0)] = 0,
-) -> list[CasoDocenteSalida]:
+) -> list[CasoEstudianteSalida]:
+    """Catálogo para usuarios autenticados; nunca expone la respuesta correcta."""
     casos = servicio.publicados(limite, desplazamiento)
-    return [CasoDocenteSalida.model_validate(caso) for caso in casos]
+    return [CasoEstudianteSalida.model_validate(caso) for caso in casos]
 
 
 @router.post(

@@ -8,6 +8,10 @@
 (function () {
   const claims = Api.exigirRol("ESTUDIANTE");
   if (!claims) return;
+  if (!claims.convocatoria_id) {
+    window.location.replace("/app/simulador");
+    return;
+  }
 
   const h = Dom.h.bind(Dom);
   const $ = Dom.$;
@@ -126,6 +130,13 @@
           h("p", { clase: "banner banner-aviso" }, "No registraste participación en esta sesión."),
         resultado.es_parcial &&
           h("p", { clase: "banner banner-aviso" }, "Resultado parcial: la participación se cerró antes de responder todas las preguntas."),
+        resultado.retroalimentacion &&
+          h(
+            "div",
+            { clase: "tarjeta retroalimentacion-docente" },
+            h("strong", {}, "💬 Retroalimentación de tu docente"),
+            h("p", {}, resultado.retroalimentacion),
+          ),
         h(
           "ul",
           { clase: "datos-briefing datos-resultado" },

@@ -94,6 +94,12 @@ alembic upgrade head
 alembic heads
 ```
 
+La migración `0012_triggers_vistas` crea 9 triggers, 1 procedimiento y 5 vistas (`vista_*`). Con el
+registro binario activo, el usuario sin `SUPER` necesita `log_bin_trust_function_creators=1`: ya
+viene en `docker-compose.yml`. Si tus contenedores se crearon antes, reinícialos
+(`docker compose up -d db db-test`) o ejecuta una vez como root
+`SET GLOBAL log_bin_trust_function_creators = 1;`. En XAMPP/MariaDB corre con `root`, que ya puede.
+
 ## Ejecutar la API
 
 ```powershell
@@ -120,6 +126,20 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 Para probarlo de punta a punta: `python scripts/seed.py`, entrar como docente, agendar una sesión,
 convocar a un estudiante, iniciarla, copiar el código y entrar como estudiante en otra pestaña.
 Desde el celular, abre `http://<IP-de-tu-PC>:8000/app/` (misma red Wi-Fi).
+
+### Registro con código de verificación
+
+`/app/registro` crea la cuenta; luego pide el código de 6 dígitos enviado al correo. El docente
+verificado queda `PENDIENTE` hasta que el administrador lo apruebe en la pestaña «Solicitudes».
+
+Para ver el código en local **sin Mailpit**, en `.env` pon `EMAIL_BACKEND=console` (y
+`DOMINIO_INSTITUCIONAL` con tu dominio), reinicia `uvicorn` y regístrate: el correo completo,
+con el código, se imprime en la terminal de la API. Si usas el worker
+(`python scripts/run_worker.py`) o `DESPACHO_INMEDIATO=false`, aparece en la terminal del worker
+(hasta 10 s). Solo para desarrollo: en producción usa `EMAIL_BACKEND=smtp`.
+
+Recuerda aplicar las migraciones nuevas (`alembic upgrade head`: `0010_registro` y
+`0011_verificacion_registro`).
 
 ## Pruebas y calidad
 

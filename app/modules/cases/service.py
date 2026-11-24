@@ -293,6 +293,10 @@ class ServicioCasos:
         caso.actualizado_en = self.momento()
         self.db.commit()
 
+    # Una sola opción correcta por pregunta: la regla se valida aquí al publicar (validacion.py)
+    # y la refuerzan en la base los triggers trg_opcion_validar_correcta_* (migración 0012).
+    # Si se intenta marcar una segunda correcta, el trigger responde y el manejador de errores
+    # lo traduce a un 409; el editor del frontend desmarca la anterior antes de marcar la nueva.
     def crear_opcion(
         self,
         caso_id: str,

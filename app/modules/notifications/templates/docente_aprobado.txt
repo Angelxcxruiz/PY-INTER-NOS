@@ -1,0 +1,8 @@
+Tu cuenta de docente fue aprobada
+
+Hola {{ nombre }}.
+
+El administrador aprobó tu cuenta en Inter Nos. Ya puedes ingresar y crear casos y sesiones.
+
+Ingresa con tu correo y la contraseña que elegiste al registrarte: {{ frontend_url }}
+Si tenías la sesión abierta, ciérrala y vuelve a entrar para que se apliquen tus permisos.

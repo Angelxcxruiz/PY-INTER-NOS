@@ -21,6 +21,7 @@ class ResultadoParticipacionSalida(BaseModel):
     nota_aprobatoria: Decimal
     es_parcial: bool
     es_ausencia: bool = False
+    retroalimentacion: str | None = None
     preguntas: list[DetallePreguntaResultado]
 
 

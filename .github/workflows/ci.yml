@@ -26,6 +26,7 @@ jobs:
       DATABASE_URL: mysql+pymysql://inter_nos_test:inter_nos_test@127.0.0.1:3306/inter_nos_test?charset=utf8mb4
       JWT_SECRET: prueba-ci-no-usar-en-produccion
       FERNET_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      DOMINIO_INSTITUCIONAL: unihumboldt.edu.co
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +39,10 @@ jobs:
         run: ruff check .
       - name: Ruff formato
         run: ruff format --check .
+      - name: Permitir triggers sin SUPER (MySQL con binlog)
+        run: >-
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot
+          -e "SET GLOBAL log_bin_trust_function_creators = 1;"
       - name: Migraciones
         run: alembic upgrade head
       - name: Pruebas
