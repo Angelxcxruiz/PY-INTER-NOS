@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block titulo %}Crear cuenta · Inter Nos{% endblock %}
+{% block clase_body %}pantalla-inicio{% endblock %}
+
+{% block cuerpo %}
+<main class="contenedor contenedor-estrecho centrado-vertical">
+  <header class="marca aparece">
+    <span class="marca-icono" aria-hidden="true">◈</span>
+    <h1>Inter Nos</h1>
+    <p class="subtitulo">Crea tu cuenta</p>
+  </header>
+
+  <section class="tarjeta elevada aparece" aria-labelledby="titulo-registro">
+    <h2 id="titulo-registro" class="titulo-tarjeta">¿Cómo vas a usar Inter Nos?</h2>
+
+    <div class="pestanas" role="tablist" aria-label="Tipo de cuenta">
+      <button type="button" class="pestana activa" role="tab" aria-selected="true"
+              data-rol="ESTUDIANTE">🎮 Estudiante</button>
+      <button type="button" class="pestana" role="tab" aria-selected="false"
+              data-rol="DOCENTE">🎓 Docente</button>
+    </div>
+
+    <p class="ayuda" id="ayuda-rol">
+      Usa tu correo institucional (termina en .edu.co). Podrás ingresar apenas verifiques tu correo con un código de 6 dígitos. Para jugar un caso necesitarás el código que te envíe tu docente.
+    </p>
+
+    <form id="formulario-registro" novalidate autocomplete="on">
+      <label class="campo">
+        <span>Nombre completo</span>
+        <input type="text" id="nombre" name="nombre" autocomplete="name" required maxlength="200">
+      </label>
+      <label class="campo">
+        <span>Correo</span>
+        <input type="email" id="correo" name="correo" inputmode="email"
+               autocomplete="username" required placeholder="nombre@universidad.edu.co">
+      </label>
+      <label class="campo">
+        <span>Contraseña (mínimo 8 caracteres)</span>
+        <input type="password" id="contrasena" name="contrasena" autocomplete="new-password"
+               required minlength="8">
+      </label>
+      <label class="campo">
+        <span>Repite la contraseña</span>
+        <input type="password" id="contrasena2" name="contrasena2" autocomplete="new-password"
+               required minlength="8">
+      </label>
+      <button type="submit" class="boton boton-grande boton-principal" id="boton-registrar">
+        CREAR CUENTA
+      </button>
+    </form>
+
+    <p class="ayuda centrado espaciado" id="ayuda-duplicado" hidden>
+      ¿Ya empezaste este registro y no lo verificaste?
+      <a id="enlace-verificar" href="/app/registro">Escribe tu código o pide uno nuevo</a>
+    </p>
+
+    <p class="ayuda centrado espaciado">
+      ¿Ya tienes cuenta? <a href="/app/">Ingresar</a>
+    </p>
+  </section>
+
+  <section class="tarjeta elevada aparece" id="vista-codigo" hidden aria-labelledby="titulo-codigo">
+    <div class="centrado">
+      <p class="emoji-grande" aria-hidden="true">✉️</p>
+      <h2 id="titulo-codigo" class="titulo-tarjeta">Verifica tu correo</h2>
+      <p class="texto-suave">
+        Enviamos un código de 6 dígitos a <strong id="correo-codigo"></strong>.
+      </p>
+    </div>
+
+    <form id="formulario-codigo" novalidate>
+      <div class="casillas-codigo" id="casillas-codigo" role="group" aria-label="Código de 6 dígitos"></div>
+      <p class="vigencia-codigo" id="vigencia-codigo" aria-live="polite"></p>
+      <button type="submit" class="boton boton-grande boton-principal" id="boton-verificar" disabled>
+        VERIFICAR
+      </button>
+    </form>
+
+    <p class="ayuda centrado espaciado">
+      ¿No te llegó?
+      <button type="button" class="boton-enlace" id="boton-reenviar" disabled>Reenviar código</button>
+    </p>
+    <p class="ayuda centrado">
+      <a href="/app/">Volver a ingresar</a>
+    </p>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/app/static/registro.js?v={{ version }}"></script>
+{% endblock %}

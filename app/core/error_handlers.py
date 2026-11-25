@@ -1,8 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from app.core.exceptions import ErrorDominio
+
+# SQLSTATE 45000 con SIGNAL: es el error que lanzan los triggers de la base (migración 0012).
+CODIGO_MYSQL_REGLA_DE_TRIGGER = 1644
 
 
 def respuesta_error(codigo: str, mensaje: str, detalles: dict | None = None) -> dict:
@@ -16,6 +20,21 @@ def respuesta_error(codigo: str, mensaje: str, detalles: dict | None = None) -> 
 
 
 def registrar_manejadores(app: FastAPI) -> None:
+    @app.exception_handler(DBAPIError)
+    async def manejar_error_de_base(request: Request, exc: DBAPIError) -> JSONResponse:
+        """Traduce la regla de un trigger a un 409 claro; cualquier otro error sigue siendo 500."""
+        del request
+        argumentos = getattr(exc.orig, "args", ())
+        if len(argumentos) >= 2 and argumentos[0] == CODIGO_MYSQL_REGLA_DE_TRIGGER:
+            return JSONResponse(
+                status_code=409,
+                content=respuesta_error("REGLA_DE_BASE_DE_DATOS", str(argumentos[1])),
+            )
+        return JSONResponse(
+            status_code=500,
+            content=respuesta_error("ERROR_INTERNO", "Ocurrió un error inesperado"),
+        )
+
     @app.exception_handler(ErrorDominio)
     async def manejar_error_dominio(
         request: Request,

@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.database import bloquear_filas_omitiendo_bloqueadas
 from app.modules.participations.models import (
     AutorizacionRepeticion,
     Participacion,
@@ -94,16 +95,11 @@ class RepositorioParticipaciones:
         )
 
     def vencidas(self, ahora) -> list[Participacion]:
-        return list(
-            self.db.scalars(
-                select(Participacion)
-                .where(
-                    Participacion.estado == "EN_PROGRESO",
-                    Participacion.vence_en <= ahora,
-                )
-                .with_for_update(skip_locked=True)
-            ).all()
+        consulta = select(Participacion).where(
+            Participacion.estado == "EN_PROGRESO",
+            Participacion.vence_en <= ahora,
         )
+        return list(self.db.scalars(bloquear_filas_omitiendo_bloqueadas(consulta, self.db)).all())
 
     def abiertas_por_sesion(self, convocatoria_ids: list[str]) -> list[Participacion]:
         if not convocatoria_ids:

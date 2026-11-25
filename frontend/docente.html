@@ -21,12 +21,18 @@
               data-seccion="casos">📚 Mis casos</button>
       <button type="button" class="pestana" role="tab" aria-selected="false"
               data-seccion="sesiones">🗓 Sesiones</button>
+      <button type="button" class="pestana oculto" role="tab" aria-selected="false"
+              data-seccion="solicitudes" id="pestana-solicitudes">📥 Solicitudes</button>
     </nav>
 
     <section id="seccion-casos" class="seccion">
       <div class="seccion-cabecera">
         <h2>Mis casos</h2>
+        <button type="button" class="boton boton-principal boton-chico oculto" id="boton-nuevo-caso">
+          + Nuevo caso
+        </button>
       </div>
+      <div id="guia-casos"></div>
       <div id="lista-casos" class="rejilla"></div>
     </section>
 
@@ -39,6 +45,13 @@
       </div>
       <div id="lista-sesiones" class="rejilla"></div>
     </section>
+
+    <section id="seccion-solicitudes" class="seccion oculto">
+      <div class="seccion-cabecera">
+        <h2>Solicitudes de docentes</h2>
+      </div>
+      <div id="lista-solicitudes" class="rejilla"></div>
+    </section>
   </div>
 
   <div id="vista-detalle" class="oculto"></div>
@@ -46,5 +59,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/app/static/docente_casos.js?v={{ version }}"></script>
+<script src="/app/static/docente_resultados.js?v={{ version }}"></script>
 <script src="/app/static/docente.js?v={{ version }}"></script>
 {% endblock %}

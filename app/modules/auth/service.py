@@ -1,12 +1,14 @@
+import hmac
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Protocol
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.clock import Reloj, ahora, como_utc
 from app.core.config import obtener_configuracion
-from app.core.enums import PropositoToken, TipoEvento
+from app.core.enums import EstadoCuenta, PropositoToken, TipoEvento
 from app.core.exceptions import (
     ErrorAutenticacion,
     ErrorConflicto,
@@ -18,12 +20,14 @@ from app.core.exceptions import (
 from app.core.security import (
     cifrar,
     crear_jwt,
+    generar_codigo_numerico,
     generar_token,
+    hash_codigo_registro,
     hash_contrasena,
     hash_token,
     verificar_contrasena,
 )
-from app.modules.auth.models import TokenCorreo, Usuario, VerificacionCorreo
+from app.modules.auth.models import CodigoRegistro, TokenCorreo, Usuario, VerificacionCorreo
 from app.modules.auth.repository import RepositorioUsuarios
 from app.modules.sessions.events import publicar
 
@@ -34,6 +38,11 @@ class ValidadorConvocatoria(Protocol):
 
 _intentos_login: dict[str, list[datetime]] = {}
 _candado_intentos = Lock()
+
+MENSAJE_REGISTRO_DUPLICADO = "No fue posible completar el registro con ese correo"
+MENSAJE_CODIGO_INVALIDO = (
+    "El código es incorrecto, venció o ya no es válido. Solicita uno nuevo con «Reenviar código»."
+)
 
 
 class ServicioUsuarios:
@@ -53,13 +62,19 @@ class ServicioUsuarios:
         return ahora(self.reloj)
 
     def _dominio_permitido(self, correo: str) -> bool:
-        dominios = [
-            dominio.strip().lower()
-            for dominio in self.configuracion.dominio_institucional.split(",")
-            if dominio.strip()
-        ]
+        """Única validación de dominio: login de estudiante, alta por admin y registro.
+
+        Acepta el dominio configurado y sus subdominios: con `edu.co`, valen
+        `unihumboldt.edu.co` o `estudiantes.otra.edu.co`, pero no `evil-edu.co`.
+        """
         correo_normalizado = correo.strip().lower()
-        return any(correo_normalizado.endswith("@" + dominio) for dominio in dominios)
+        if "@" not in correo_normalizado:
+            return False
+        dominio_correo = correo_normalizado.rpartition("@")[2]
+        return any(
+            dominio_correo == dominio or dominio_correo.endswith("." + dominio)
+            for dominio in self.configuracion.dominios_permitidos
+        )
 
     def _aplicar_limite(self, correo: str) -> None:
         momento = self._momento()
@@ -83,19 +98,49 @@ class ServicioUsuarios:
         correo = correo.strip().lower()
         self._aplicar_limite(correo)
         usuario = self.repositorio.por_correo(correo)
+        # Los estudiantes registrados (Fase 11) tienen contraseña; los que crea M3 al convocar no.
         if (
             usuario is None
             or not usuario.activo
-            or usuario.rol not in {"ADMINISTRADOR", "DOCENTE"}
+            or usuario.rol not in {"ADMINISTRADOR", "DOCENTE", "ESTUDIANTE"}
             or usuario.hash_contrasena is None
             or not verificar_contrasena(usuario.hash_contrasena, contrasena)
         ):
             self._registrar_fallo(correo)
             raise ErrorAutenticacion("Credenciales invalidas")
 
-        permisos = self.repositorio.permisos(usuario)
+        # Se revela solo a quien ya probó conocer la contraseña.
+        if usuario.estado_cuenta == EstadoCuenta.SIN_VERIFICAR:
+            raise ErrorAutenticacion(
+                "Verifica tu correo para continuar: te enviamos un código de 6 dígitos. "
+                "Si no lo tienes, solicita uno nuevo.",
+                codigo="CORREO_SIN_VERIFICAR",
+                detalles={
+                    "correo": usuario.correo,
+                    "verificar": "/api/v1/auth/registro/verificar",
+                    "reenviar": "/api/v1/auth/registro/reenviar",
+                },
+            )
+        if usuario.estado_cuenta == EstadoCuenta.RECHAZADO:
+            raise ErrorAutenticacion(
+                "Tu solicitud de registro fue rechazada. Comunícate con el administrador.",
+                codigo="CUENTA_RECHAZADA",
+                detalles={"motivo": usuario.motivo_rechazo},
+            )
+
+        # Un docente pendiente puede entrar (para ver su estado) pero sin permisos.
+        permisos = (
+            self.repositorio.permisos(usuario)
+            if usuario.estado_cuenta == EstadoCuenta.ACTIVO
+            else []
+        )
         token = crear_jwt(
-            {"sub": usuario.id, "rol": usuario.rol, "permisos": permisos},
+            {
+                "sub": usuario.id,
+                "rol": usuario.rol,
+                "permisos": permisos,
+                "estado_cuenta": usuario.estado_cuenta,
+            },
         )
         return token, usuario
 
@@ -183,8 +228,230 @@ class ServicioUsuarios:
         self.db.refresh(usuario)
         return usuario
 
-    def listar_usuarios(self, limite: int, desplazamiento: int) -> list[Usuario]:
-        return self.repositorio.listar(limite, desplazamiento)
+    def listar_usuarios(
+        self, limite: int, desplazamiento: int, estado_cuenta: str | None = None
+    ) -> list[Usuario]:
+        if estado_cuenta is not None and estado_cuenta not in {e.value for e in EstadoCuenta}:
+            raise ErrorValidacion("Estado de cuenta no permitido")
+        return self.repositorio.listar(limite, desplazamiento, estado_cuenta)
+
+    # --- Registro con verificación por código y aprobación (Fases 11 y 11b) ----------------
+
+    def registrar(self, nombre: str, correo: str, contrasena: str, rol: str) -> Usuario:
+        """Autorregistro: la cuenta nace SIN_VERIFICAR, sin acceso a nada.
+
+        Quedan en la misma transacción el usuario, la fila reservada del código y el evento
+        REGISTRO_INICIADO. El código de 6 dígitos se genera al construir el correo, así que ni
+        aquí ni en el payload del evento existe en claro.
+        """
+        correo = correo.strip().lower()
+        if rol not in {"ESTUDIANTE", "DOCENTE"}:
+            raise ErrorValidacion("Solo se puede registrar un estudiante o un docente")
+        if len(contrasena) < 8:
+            raise ErrorValidacion("La contrasena debe tener al menos 8 caracteres")
+        if rol == "ESTUDIANTE" and not self._dominio_permitido(correo):
+            raise ErrorValidacion("Los estudiantes deben registrarse con su correo institucional")
+        # Mismo mensaje sin importar el rol del usuario que ya existe.
+        if self.repositorio.por_correo(correo) is not None:
+            raise ErrorConflicto(MENSAJE_REGISTRO_DUPLICADO)
+
+        momento = self._momento()
+        usuario = Usuario(
+            nombre=nombre.strip(),
+            correo=correo,
+            hash_contrasena=hash_contrasena(contrasena),
+            rol=rol,
+            activo=True,
+            estado_cuenta=EstadoCuenta.SIN_VERIFICAR,
+            creado_en=momento,
+            actualizado_en=momento,
+        )
+        try:
+            self.repositorio.agregar(usuario)
+        except IntegrityError as exc:  # dos registros simultáneos con el mismo correo
+            self.db.rollback()
+            raise ErrorConflicto(MENSAJE_REGISTRO_DUPLICADO) from exc
+        self._emitir_codigo_registro(usuario)
+        self.db.commit()
+        self.db.refresh(usuario)
+        return usuario
+
+    def _emitir_codigo_registro(self, usuario: Usuario) -> None:
+        """Reserva la fila del código y publica el evento, sin commit (transacción en curso)."""
+        momento = self._momento()
+        self.repositorio.eliminar_codigos_registro(usuario.id)
+        fila = self.repositorio.agregar_codigo_registro(
+            CodigoRegistro(
+                usuario_id=usuario.id,
+                codigo_hash=None,
+                expira_en=momento
+                + timedelta(minutes=self.configuracion.codigo_registro_expira_min),
+                intentos=0,
+                creada_en=momento,
+            )
+        )
+        publicar(
+            self.db,
+            TipoEvento.REGISTRO_INICIADO.value,
+            "usuario",
+            usuario.id,
+            {"usuario_id": usuario.id, "codigo_registro_id": fila.id},
+        )
+
+    def preparar_codigo_registro(
+        self, codigo_registro_id: str | None
+    ) -> tuple[Usuario, str] | None:
+        """Genera el código al construir el correo; en la base queda solo su hash (sin commit).
+
+        Devuelve None si ya no corresponde enviarlo (reemplazado, usado o cuenta ya verificada).
+        """
+        if not codigo_registro_id:
+            return None
+        fila = self.repositorio.codigo_registro_por_id(codigo_registro_id)
+        if fila is None or fila.usado_en is not None:
+            return None
+        usuario = self.repositorio.por_id(fila.usuario_id)
+        if usuario is None or usuario.estado_cuenta != EstadoCuenta.SIN_VERIFICAR:
+            return None
+        codigo = generar_codigo_numerico(6)
+        fila.codigo_hash = hash_codigo_registro(usuario.id, codigo)
+        # La vigencia cuenta desde que se genera el código que recibe el usuario.
+        fila.expira_en = self._momento() + timedelta(
+            minutes=self.configuracion.codigo_registro_expira_min
+        )
+        fila.intentos = 0
+        self.db.flush()
+        return usuario, codigo
+
+    def verificar_registro(self, correo: str, codigo: str) -> Usuario:
+        """Código correcto: la cuenta pasa a ACTIVO (estudiante) o PENDIENTE (docente).
+
+        Todos los fallos devuelven el mismo error: no se revela si el correo existe.
+        """
+        correo = correo.strip().lower()
+        usuario = self.repositorio.por_correo(correo)
+        fila = None
+        if usuario is not None and usuario.estado_cuenta == EstadoCuenta.SIN_VERIFICAR:
+            fila = self.repositorio.ultimo_codigo_registro(usuario.id)
+        if usuario is None or fila is None:
+            raise ErrorDominio(MENSAJE_CODIGO_INVALIDO, codigo="CODIGO_INVALIDO")
+
+        momento = self._momento()
+        agotado = fila.intentos >= self.configuracion.codigo_registro_max_intentos
+        if (
+            fila.usado_en is not None
+            or fila.codigo_hash is None
+            or como_utc(fila.expira_en) <= momento
+            or agotado
+        ):
+            raise ErrorDominio(MENSAJE_CODIGO_INVALIDO, codigo="CODIGO_INVALIDO")
+
+        esperado = hash_codigo_registro(usuario.id, codigo)
+        if not hmac.compare_digest(esperado, fila.codigo_hash):
+            fila.intentos += 1
+            self.db.commit()  # el intento fallido debe quedar registrado
+            raise ErrorDominio(MENSAJE_CODIGO_INVALIDO, codigo="CODIGO_INVALIDO")
+
+        fila.usado_en = momento
+        usuario.estado_cuenta = (
+            EstadoCuenta.ACTIVO if usuario.rol == "ESTUDIANTE" else EstadoCuenta.PENDIENTE
+        )
+        usuario.correo_verificado = True
+        usuario.verificado_en = momento
+        usuario.actualizado_en = momento
+        publicar(
+            self.db,
+            TipoEvento.REGISTRO_VERIFICADO.value,
+            "usuario",
+            usuario.id,
+            {"usuario_id": usuario.id},
+        )
+        self.db.commit()
+        self.db.refresh(usuario)
+        return usuario
+
+    def reenviar_codigo_registro(self, correo: str) -> bool:
+        """True si se emitió un código nuevo. Quien llama responde igual en todos los casos."""
+        usuario = self.repositorio.por_correo(correo.strip().lower())
+        if usuario is None or usuario.estado_cuenta != EstadoCuenta.SIN_VERIFICAR:
+            return False
+        ultima = self.repositorio.ultimo_codigo_registro(usuario.id)
+        espera = self.configuracion.codigo_registro_cooldown_seg
+        if (
+            ultima is not None
+            and (self._momento() - como_utc(ultima.creada_en)).total_seconds() < espera
+        ):
+            return False
+        self._emitir_codigo_registro(usuario)
+        self.db.commit()
+        return True
+
+    def listar_solicitudes(self, limite: int, desplazamiento: int) -> list[Usuario]:
+        return self.repositorio.solicitudes_docentes(limite, desplazamiento)
+
+    def contar_solicitudes(self) -> int:
+        return self.repositorio.contar_solicitudes_docentes()
+
+    def _docente_de_solicitud(self, usuario_id: str) -> Usuario:
+        usuario = self.repositorio.por_id(usuario_id)
+        if usuario is None or usuario.rol != "DOCENTE":
+            raise ErrorNoEncontrado("Solicitud no encontrada")
+        return usuario
+
+    def aprobar_solicitud(
+        self, usuario_id: str, permisos_codigos: list[str], administrador_id: str
+    ) -> Usuario:
+        """PENDIENTE -> ACTIVO. Repetirlo no duplica permisos ni vuelve a publicar el evento."""
+        usuario = self._docente_de_solicitud(usuario_id)
+        if usuario.estado_cuenta == EstadoCuenta.RECHAZADO:
+            raise ErrorConflicto("La solicitud ya fue rechazada")
+
+        permisos = []
+        for codigo in dict.fromkeys(permisos_codigos):
+            permiso = self.repositorio.permiso_por_codigo(codigo)
+            if permiso is None:
+                raise ErrorNoEncontrado("Permiso no encontrado", detalles={"permiso": codigo})
+            permisos.append(permiso)
+
+        momento = self._momento()
+        if usuario.estado_cuenta == EstadoCuenta.PENDIENTE:
+            usuario.estado_cuenta = EstadoCuenta.ACTIVO
+            usuario.aprobado_en = momento
+            usuario.aprobado_por_id = administrador_id
+            usuario.motivo_rechazo = None
+            usuario.actualizado_en = momento
+            publicar(
+                self.db,
+                TipoEvento.DOCENTE_APROBADO.value,
+                "usuario",
+                usuario.id,
+                {"usuario_id": usuario.id},
+            )
+        for permiso in permisos:
+            self.repositorio.asignar_permiso(usuario, permiso, momento)
+        self.db.commit()
+        self.db.refresh(usuario)
+        return usuario
+
+    def rechazar_solicitud(self, usuario_id: str, motivo: str | None) -> Usuario:
+        """PENDIENTE -> RECHAZADO. Repetirlo no vuelve a publicar el evento."""
+        usuario = self._docente_de_solicitud(usuario_id)
+        if usuario.estado_cuenta == EstadoCuenta.ACTIVO:
+            raise ErrorConflicto("La cuenta ya fue aprobada")
+        if usuario.estado_cuenta == EstadoCuenta.PENDIENTE:
+            usuario.estado_cuenta = EstadoCuenta.RECHAZADO
+            usuario.motivo_rechazo = (motivo or "").strip() or None
+            usuario.actualizado_en = self._momento()
+            publicar(
+                self.db,
+                TipoEvento.DOCENTE_RECHAZADO.value,
+                "usuario",
+                usuario.id,
+                {"usuario_id": usuario.id},
+            )
+            self.db.commit()
+            self.db.refresh(usuario)
+        return usuario
 
     def obtener_usuario(self, usuario_id: str) -> Usuario:
         usuario = self.repositorio.por_id(usuario_id)

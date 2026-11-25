@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.database import bloquear_filas_omitiendo_bloqueadas
 from app.modules.auth.models import Usuario
 from app.modules.sessions.models import Convocatoria, EspacioAcademico, Sesion
 
@@ -73,12 +74,8 @@ class RepositorioSesiones:
         )
 
     def sesiones_vencidas(self, limite_cierre) -> list[Sesion]:
-        stmt = (
-            select(Sesion)
-            .where(
-                Sesion.estado.in_(["SIN_INICIAR", "EN_CURSO"]),
-                Sesion.fin_programado < limite_cierre,
-            )
-            .with_for_update(skip_locked=True)
+        stmt = select(Sesion).where(
+            Sesion.estado.in_(["SIN_INICIAR", "EN_CURSO"]),
+            Sesion.fin_programado < limite_cierre,
         )
-        return list(self.db.scalars(stmt).all())
+        return list(self.db.scalars(bloquear_filas_omitiendo_bloqueadas(stmt, self.db)).all())

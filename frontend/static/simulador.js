@@ -33,6 +33,69 @@
     reloj: { finMs: 0, intervalo: null, ultimoSync: 0 },
   };
 
+  /* ---------- unirse a una sesión con el código (cuenta registrada) ---------- */
+
+  function mostrarUnirseConCodigo() {
+    const usuario = Api.usuario() || {};
+    const entrada = h("input", {
+      type: "text",
+      id: "codigo-sesion",
+      autocomplete: "off",
+      autocapitalize: "characters",
+      required: true,
+      placeholder: "Ej.: 2L3Q5RSY",
+    });
+    const boton = h("button", { type: "submit", clase: "boton boton-grande boton-principal" }, "UNIRME");
+    const formulario = h(
+      "form",
+      {
+        novalidate: true,
+        onsubmit: async (evento) => {
+          evento.preventDefault();
+          const codigo = entrada.value.trim();
+          if (!codigo) {
+            Aviso.error("Escribe el código que te dio tu docente.");
+            return;
+          }
+          boton.disabled = true;
+          boton.classList.add("cargando");
+          try {
+            const respuesta = await Api.post(
+              "/auth/student-login",
+              { correo: usuario.correo, codigo },
+              { credenciales: true },
+            );
+            Api.guardarSesion(respuesta.token_acceso, respuesta.usuario || usuario);
+            window.location.reload();
+          } catch (error) {
+            Aviso.deError(error);
+            boton.disabled = false;
+            boton.classList.remove("cargando");
+          }
+        },
+      },
+      h("label", { clase: "campo" }, h("span", {}, "Código de tu sesión"), entrada),
+      boton,
+    );
+
+    hud.classList.add("oculto");
+    Dom.reemplazar(
+      escena,
+      h(
+        "section",
+        { clase: "briefing aparece" },
+        h("p", { clase: "kicker" }, usuario.nombre ? `Hola, ${usuario.nombre}` : "Bienvenido/a"),
+        h("h1", { clase: "titulo-caso" }, "Únete a una sesión"),
+        h(
+          "div",
+          { clase: "tarjeta elevada tarjeta-historia" },
+          h("p", { clase: "texto-historia" }, "Tu docente te dará un código cuando te convoque a una sesión. Escríbelo aquí para empezar el caso."),
+          formulario,
+        ),
+      ),
+    );
+  }
+
   /* ---------- carga inicial ---------- */
 
   function ordenar(lista) {
@@ -65,7 +128,8 @@
 
   async function iniciar() {
     if (!claims.caso_id || !claims.convocatoria_id) {
-      Api.cerrarSesion("Vuelve a ingresar con tu código para actualizar tu sesión.");
+      // Estudiante registrado que entró con contraseña: aún no eligió su sesión.
+      mostrarUnirseConCodigo();
       return;
     }
     try {

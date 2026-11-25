@@ -36,9 +36,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        configuracion_alembic.get_section(
-            configuracion_alembic.config_ini_section
-        ) or {},
+        configuracion_alembic.get_section(configuracion_alembic.config_ini_section) or {},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

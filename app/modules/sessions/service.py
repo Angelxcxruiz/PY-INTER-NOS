@@ -463,9 +463,11 @@ class ServicioSesiones:
                 from app.modules.evaluations.service import ServicioEvaluaciones
                 from app.modules.participations.service import ServicioParticipaciones
 
-                cerradas = ServicioParticipaciones(self.db, self.reloj).cerrar_por_sesion(modelo.id)
+                participaciones_cerradas = ServicioParticipaciones(
+                    self.db, self.reloj
+                ).cerrar_por_sesion(modelo.id)
                 evaluaciones = ServicioEvaluaciones(self.db, self.reloj)
-                for participacion in cerradas:
+                for participacion in participaciones_cerradas:
                     evaluaciones.calificar_participacion(
                         participacion.id,
                         commit=False,

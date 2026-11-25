@@ -19,7 +19,7 @@
     },
     docente: {
       etiqueta: "Contraseña",
-      ayuda: "Ingreso para docentes y administradores.",
+      ayuda: "Para docentes, administradores y estudiantes con cuenta registrada.",
       autocompletar: "current-password",
       ruta: "/auth/login",
       cuerpo: (correo, secreto) => ({ correo, contrasena: secreto }),
@@ -83,6 +83,14 @@
       Api.guardarSesion(respuesta.token_acceso, respuesta.usuario);
       window.location.href = Api.rutaInicioDelRol(Api.rol());
     } catch (error) {
+      if (error.codigo === "CORREO_SIN_VERIFICAR") {
+        sessionStorage.setItem(
+          CLAVES_SESION.aviso,
+          "Verifica tu correo para activar tu cuenta: escribe el código que te enviamos o pide uno nuevo.",
+        );
+        window.location.href = `/app/registro?verificar=${encodeURIComponent(correo)}`;
+        return;
+      }
       Aviso.deError(error);
       botonIngresar.disabled = false;
       botonIngresar.classList.remove("cargando");

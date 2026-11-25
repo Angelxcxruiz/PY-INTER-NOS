@@ -91,6 +91,11 @@ def pagina_resultado(request: Request) -> HTMLResponse:
     return _pagina(request, "resultado.html")
 
 
+@app.get("/app/registro", response_class=HTMLResponse, include_in_schema=False)
+def pagina_registro(request: Request) -> HTMLResponse:
+    return _pagina(request, "registro.html")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     with SessionLocal() as db:

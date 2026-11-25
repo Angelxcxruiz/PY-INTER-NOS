@@ -40,7 +40,7 @@ def db(base_real):
 @pytest.fixture
 def escenario_de_juego(db):
     inicio_prueba = ahora()
-    dominio = obtener_configuracion().dominio_institucional
+    dominio = obtener_configuracion().dominio_principal
     docente = Usuario(
         nombre="Docente de prueba",
         correo=f"docente.{inicio_prueba.timestamp():.0f}@{dominio}",
@@ -128,6 +128,8 @@ def escenario_de_juego(db):
         "codigo": descifrar(convocatoria.codigo_cifrado),
         "convocatoria_id": convocatoria.id,
         "caso_id": caso.id,
+        "docente_id": docente.id,
+        "sesion_id": sesion.id,
         "preguntas": [
             {
                 "id": pregunta.id,
@@ -210,3 +212,106 @@ def test_la_vista_del_estudiante_no_filtra_las_respuestas(cliente, escenario_de_
     assert vista.status_code == 200
     assert "es_correcta" not in vista.text
     assert "justificacion" not in vista.text
+
+
+def _cabeceras_docente(datos) -> dict:
+    from app.core.security import crear_jwt
+
+    token = crear_jwt(
+        {
+            "sub": datos["docente_id"],
+            "rol": "DOCENTE",
+            "permisos": ["CREAR_CASOS"],
+            "estado_cuenta": "ACTIVO",
+        }
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _juega_y_finaliza(cliente, datos) -> str:
+    cabeceras = _cabeceras(cliente, datos)
+    inicio = cliente.post(
+        f"/api/v1/participations/start/{datos['convocatoria_id']}", headers=cabeceras
+    )
+    participacion_id = inicio.json()["id"]
+    pregunta = datos["preguntas"][0]
+    cliente.put(
+        f"/api/v1/participations/{participacion_id}/answers/{pregunta['id']}",
+        headers=cabeceras,
+        json={"opcion_id": pregunta["correcta"]},
+    )
+    cliente.post(f"/api/v1/participations/{participacion_id}/finish", headers=cabeceras)
+    return participacion_id
+
+
+def test_el_catalogo_de_casos_publicados_exige_sesion_y_no_filtra_respuestas(
+    cliente, escenario_de_juego
+) -> None:
+    sin_token = cliente.get("/api/v1/cases/publicados")
+    con_token = cliente.get(
+        "/api/v1/cases/publicados", headers=_cabeceras(cliente, escenario_de_juego)
+    )
+
+    assert sin_token.status_code == 401
+    assert con_token.status_code == 200
+    assert "es_correcta" not in con_token.text
+    assert "justificacion" not in con_token.text
+
+
+def test_el_docente_dueno_ve_el_resultado_y_otro_docente_no(cliente, escenario_de_juego) -> None:
+    datos = escenario_de_juego
+    participacion_id = _juega_y_finaliza(cliente, datos)
+    dueno = _cabeceras_docente(datos)
+    ajeno = _cabeceras_docente({**datos, "docente_id": "00000000-0000-0000-0000-000000000000"})
+
+    por_participacion = cliente.get(
+        f"/api/v1/participations/{participacion_id}/result", headers=dueno
+    )
+    por_convocatoria = cliente.get(
+        f"/api/v1/convocatorias/{datos['convocatoria_id']}/result", headers=dueno
+    )
+    de_otro = cliente.get(f"/api/v1/convocatorias/{datos['convocatoria_id']}/result", headers=ajeno)
+
+    assert por_participacion.status_code == 200, por_participacion.text
+    assert por_convocatoria.status_code == 200, por_convocatoria.text
+    assert por_participacion.json()["aciertos"] == 1
+    assert de_otro.status_code == 403
+
+
+def test_el_estudiante_lee_la_retroalimentacion_que_le_escribio_el_docente(
+    cliente, escenario_de_juego
+) -> None:
+    datos = escenario_de_juego
+    participacion_id = _juega_y_finaliza(cliente, datos)
+
+    guardada = cliente.post(
+        f"/api/v1/participations/{participacion_id}/retroalimentacion",
+        headers=_cabeceras_docente(datos),
+        json={"texto": "Buen análisis, revisa la pregunta 2."},
+    )
+    resultado = cliente.get(
+        f"/api/v1/participations/{participacion_id}/result",
+        headers=_cabeceras(cliente, datos),
+    )
+
+    assert guardada.status_code == 200, guardada.text
+    assert resultado.json()["retroalimentacion"] == "Buen análisis, revisa la pregunta 2."
+
+
+def test_la_repeticion_solo_se_autoriza_con_la_sesion_en_curso(
+    cliente, db, escenario_de_juego
+) -> None:
+    datos = escenario_de_juego
+    dueno = _cabeceras_docente(datos)
+    ruta = f"/api/v1/participations/convocatorias/{datos['convocatoria_id']}/autorizar-repeticion"
+
+    en_curso = cliente.post(ruta, headers=dueno, json={"motivo": "Se cayó la conexión"})
+    db.execute(
+        Sesion.__table__.update().where(Sesion.id == datos["sesion_id"]).values(estado="FINALIZADO")
+    )
+    db.commit()
+    finalizada = cliente.post(ruta, headers=dueno, json={"motivo": "Tarde"})
+
+    assert en_curso.status_code == 200, en_curso.text
+    assert finalizada.status_code == 409
+    assert finalizada.json()["error"]["detalles"]["estado_actual"] == "FINALIZADO"

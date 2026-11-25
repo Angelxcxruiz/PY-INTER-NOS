@@ -1,8 +1,10 @@
+from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 
 from app.modules.auth.dependencies import (
+    obtener_despacho,
     obtener_servicio,
     obtener_usuario_actual,
 )
@@ -10,15 +12,24 @@ from app.modules.auth.schemas import (
     PermisoRespuesta,
     RespuestaAcceso,
     RespuestaMensaje,
+    RespuestaReenvioCodigo,
+    RespuestaRegistro,
     RespuestaUsuario,
+    RespuestaVerificacionRegistro,
+    SolicitudAprobacion,
     SolicitudConfirmarCorreo,
     SolicitudCrearUsuario,
+    SolicitudDocenteSalida,
     SolicitudEditarUsuario,
     SolicitudLogin,
     SolicitudLoginEstudiante,
     SolicitudOlvideContrasena,
+    SolicitudRechazo,
+    SolicitudReenviarCodigo,
     SolicitudReenviarVerificacion,
+    SolicitudRegistro,
     SolicitudRestablecerContrasena,
+    SolicitudVerificarRegistro,
 )
 from app.modules.auth.service import ServicioUsuarios
 from app.shared.dependencias_autenticacion import requerir_rol
@@ -102,19 +113,132 @@ def reenviar_verificacion(
     return RespuestaMensaje(mensaje="Si el correo existe, se envio un enlace de verificacion.")
 
 
+@router.post("/registro", response_model=RespuestaRegistro, status_code=201)
+def registro(
+    solicitud: SolicitudRegistro,
+    segundo_plano: BackgroundTasks,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+    despachar: Annotated[Callable[[], int], Depends(obtener_despacho)],
+) -> RespuestaRegistro:
+    """Crea la cuenta SIN_VERIFICAR y envía un código de 6 dígitos. Jamás lo devuelve."""
+    usuario = servicio.registrar(
+        solicitud.nombre, solicitud.correo, solicitud.contrasena, solicitud.rol
+    )
+    segundo_plano.add_task(despachar)
+    configuracion = servicio.configuracion
+    return RespuestaRegistro(
+        usuario_id=usuario.id,
+        correo=usuario.correo,
+        mensaje=(
+            "Te enviamos un código de 6 dígitos a tu correo. Ingrésalo para completar tu registro."
+        ),
+        vigencia_segundos=configuracion.codigo_registro_expira_min * 60,
+        reenvio_segundos=configuracion.codigo_registro_cooldown_seg,
+    )
+
+
+@router.post("/registro/verificar", response_model=RespuestaVerificacionRegistro)
+def verificar_registro(
+    solicitud: SolicitudVerificarRegistro,
+    segundo_plano: BackgroundTasks,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+    despachar: Annotated[Callable[[], int], Depends(obtener_despacho)],
+) -> RespuestaVerificacionRegistro:
+    usuario = servicio.verificar_registro(solicitud.correo, solicitud.codigo)
+    segundo_plano.add_task(despachar)
+    if usuario.rol == "ESTUDIANTE":
+        mensaje = "Correo verificado: ya puedes ingresar."
+    else:
+        mensaje = "Correo verificado: tu cuenta será revisada por el administrador."
+    return RespuestaVerificacionRegistro(
+        mensaje=mensaje, rol=usuario.rol, estado_cuenta=usuario.estado_cuenta
+    )
+
+
+@router.post("/registro/reenviar", response_model=RespuestaReenvioCodigo)
+def reenviar_codigo_registro(
+    solicitud: SolicitudReenviarCodigo,
+    segundo_plano: BackgroundTasks,
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)],
+    despachar: Annotated[Callable[[], int], Depends(obtener_despacho)],
+) -> RespuestaReenvioCodigo:
+    """Responde SIEMPRE lo mismo, exista o no el correo, para no filtrar quién está registrado."""
+    if servicio.reenviar_codigo_registro(solicitud.correo):
+        segundo_plano.add_task(despachar)
+    configuracion = servicio.configuracion
+    return RespuestaReenvioCodigo(
+        mensaje="Si el correo existe y está sin verificar, se envió un código nuevo.",
+        vigencia_segundos=configuracion.codigo_registro_expira_min * 60,
+        reenvio_segundos=configuracion.codigo_registro_cooldown_seg,
+    )
+
+
 @router_administracion.get(
     "/users",
     response_model=list[RespuestaUsuario],
+)
+@router_administracion.get(
+    "/usuarios",
+    response_model=list[RespuestaUsuario],
+    include_in_schema=False,
 )
 def listar_usuarios(
     sesion=Depends(requerir_rol("ADMINISTRADOR")),
     servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)] = None,
     limite: Annotated[int, Query(ge=1, le=100)] = 20,
     desplazamiento: Annotated[int, Query(ge=0)] = 0,
+    estado_cuenta: Annotated[str | None, Query()] = None,
 ) -> list[RespuestaUsuario]:
     del sesion
-    usuarios = servicio.listar_usuarios(limite, desplazamiento)
+    usuarios = servicio.listar_usuarios(limite, desplazamiento, estado_cuenta)
     return [RespuestaUsuario.model_validate(usuario) for usuario in usuarios]
+
+
+@router_administracion.get(
+    "/solicitudes",
+    response_model=list[SolicitudDocenteSalida],
+)
+def listar_solicitudes(
+    respuesta: Response,
+    sesion=Depends(requerir_rol("ADMINISTRADOR")),
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)] = None,
+    limite: Annotated[int, Query(ge=1, le=100)] = 20,
+    desplazamiento: Annotated[int, Query(ge=0)] = 0,
+) -> list[SolicitudDocenteSalida]:
+    del sesion
+    respuesta.headers["X-Total-Count"] = str(servicio.contar_solicitudes())
+    solicitudes = servicio.listar_solicitudes(limite, desplazamiento)
+    return [SolicitudDocenteSalida.model_validate(usuario) for usuario in solicitudes]
+
+
+@router_administracion.post(
+    "/solicitudes/{usuario_id}/aprobar",
+    response_model=RespuestaUsuario,
+)
+def aprobar_solicitud(
+    usuario_id: str,
+    entrada: SolicitudAprobacion | None = None,
+    sesion=Depends(requerir_rol("ADMINISTRADOR")),
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)] = None,
+) -> RespuestaUsuario:
+    permisos = entrada.permisos if entrada is not None else []
+    usuario = servicio.aprobar_solicitud(usuario_id, permisos, str(sesion["sub"]))
+    return RespuestaUsuario.model_validate(usuario)
+
+
+@router_administracion.post(
+    "/solicitudes/{usuario_id}/rechazar",
+    response_model=RespuestaUsuario,
+)
+def rechazar_solicitud(
+    usuario_id: str,
+    entrada: SolicitudRechazo | None = None,
+    sesion=Depends(requerir_rol("ADMINISTRADOR")),
+    servicio: Annotated[ServicioUsuarios, Depends(obtener_servicio)] = None,
+) -> RespuestaUsuario:
+    del sesion
+    usuario = servicio.rechazar_solicitud(usuario_id, entrada.motivo if entrada else None)
+    return RespuestaUsuario.model_validate(usuario)
 
 
 @router_administracion.post(

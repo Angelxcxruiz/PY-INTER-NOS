@@ -285,10 +285,10 @@ def reset_demo(db) -> None:
         db.flush()
     db.execute(delete(Caso).where(Caso.nombre == nombre))
     db.flush()
-    correo_demo = [
-        f"docente1@{obtener_configuracion().dominio_institucional}",
-        f"docente2@{obtener_configuracion().dominio_institucional}",
-    ] + [f"estudiante{i}@{obtener_configuracion().dominio_institucional}" for i in range(1, 6)]
+    dominio = obtener_configuracion().dominio_principal
+    correo_demo = [f"docente1@{dominio}", f"docente2@{dominio}"] + [
+        f"estudiante{i}@{dominio}" for i in range(1, 6)
+    ]
     usuarios_demo = list(db.scalars(select(Usuario).where(Usuario.correo.in_(correo_demo))).all())
     ids_docentes = [usuario.id for usuario in usuarios_demo if usuario.rol == "DOCENTE"]
     if ids_docentes:
@@ -349,7 +349,7 @@ def main() -> int:
         docente_password = config.docente_password
         docente1, creado = asegurar_usuario(
             db,
-            f"docente1@{config.dominio_institucional}",
+            f"docente1@{config.dominio_principal}",
             "Docente Uno",
             "DOCENTE",
             docente_password,
@@ -359,7 +359,7 @@ def main() -> int:
 
         docente2, creado = asegurar_usuario(
             db,
-            f"docente2@{config.dominio_institucional}",
+            f"docente2@{config.dominio_principal}",
             "Docente Dos",
             "DOCENTE",
             docente_password,
@@ -370,7 +370,7 @@ def main() -> int:
         for indice in range(1, 6):
             estudiante, creado = asegurar_usuario(
                 db,
-                f"estudiante{indice}@{config.dominio_institucional}",
+                f"estudiante{indice}@{config.dominio_principal}",
                 f"Estudiante {indice}",
                 "ESTUDIANTE",
                 None,
@@ -456,8 +456,8 @@ def main() -> int:
     print(f"- Casos creados: {casos_creados}")
     print(f"- Sesiones creadas: {sesiones_creadas}")
     print(f"- Administrador: {config.admin_inicial_correo}")
-    print("- Docente 1:", f"docente1@{config.dominio_institucional}")
-    print("- Docente 2:", f"docente2@{config.dominio_institucional}")
+    print("- Docente 1:", f"docente1@{config.dominio_principal}")
+    print("- Docente 2:", f"docente2@{config.dominio_principal}")
     print("- Estudiantes: estudiante1@... a estudiante5@...")
     if args.con_sesion:
         for correo, codigo in codigos:

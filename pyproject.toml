@@ -40,6 +40,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --cov=app --cov-report=term-missing"
 testpaths = ["tests"]
+markers = [
+    "integracion: prueba contra MySQL real (triggers, vistas y migraciones)",
+]
 
 [tool.ruff]
 target-version = "py312"

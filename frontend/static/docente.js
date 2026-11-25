@@ -8,6 +8,62 @@
   const $ = Dom.$;
   const reemplazar = Dom.reemplazar;
 
+  /* ---------- docente con la cuenta en revisión ---------- */
+
+  function mostrarCuentaEnRevision() {
+    const usuario = Api.usuario() || {};
+    $("#nombre-usuario").textContent = usuario.nombre || "";
+    $("#boton-salir").addEventListener("click", () => Api.cerrarSesion());
+
+    const actualizar = h("button", {
+      type: "button",
+      clase: "boton boton-principal",
+      texto: "Actualizar estado",
+      onclick: async () => {
+        try {
+          const yo = await Api.get("/auth/me");
+          if (yo.estado_cuenta === "ACTIVO") {
+            Api.cerrarSesion("¡Tu cuenta fue aprobada! Vuelve a ingresar para usar tu panel.");
+          } else if (yo.estado_cuenta === "RECHAZADO") {
+            Api.cerrarSesion("Tu solicitud fue rechazada. Comunícate con el administrador.");
+          } else {
+            Aviso.info("Tu cuenta sigue en revisión.");
+          }
+        } catch (error) {
+          Aviso.deError(error);
+        }
+      },
+    });
+
+    reemplazar(
+      $("main.contenedor"),
+      h(
+        "section",
+        { clase: "tarjeta elevada aparece centrado" },
+        h("p", { clase: "emoji-grande", "aria-hidden": "true" }, "⏳"),
+        h("h2", { clase: "titulo-tarjeta" }, "Tu cuenta está en revisión"),
+        h(
+          "p",
+          { clase: "texto-suave" },
+          "Un administrador debe aprobar tu solicitud antes de que puedas crear casos y agendar sesiones. Te avisaremos por correo cuando haya una decisión.",
+        ),
+        h(
+          "ul",
+          { clase: "meta meta-vertical" },
+          h("li", {}, `👤 ${usuario.nombre || "—"}`),
+          h("li", {}, `✉ ${usuario.correo || "—"}`),
+          h("li", {}, `🗓 Solicitud enviada: ${Fechas.formatear(usuario.creado_en)}`),
+        ),
+        actualizar,
+      ),
+    );
+  }
+
+  if (claims.rol === "DOCENTE" && (claims.estado_cuenta || "ACTIVO") !== "ACTIVO") {
+    mostrarCuentaEnRevision();
+    return;
+  }
+
   const ESTADOS_CASO = {
     BORRADOR: "Borrador",
     PUBLICADO: "Publicado",
@@ -20,7 +76,9 @@
   };
   const CLAVE_CONVOCADOS = "inn_convocados";
 
-  const estado = { casos: [], sesiones: [], espacios: null, usuarios: null };
+  const estado = { casos: [], sesiones: [], espacios: null, usuarios: null, convocados: {}, entregas: {} };
+  let panelResultados = null;
+  let pestanaDetalle = null;
 
   /* ---------- utilidades ---------- */
 
@@ -88,8 +146,27 @@
       reemplazar(lista, vacio("No se pudieron cargar los casos."));
       return;
     }
+    const guia = mostrarGuia();
+    if (!estado.casos.length) guia.open = true;
+    reemplazar($("#guia-casos"), guia);
     if (!estado.casos.length) {
-      reemplazar(lista, vacio("Todavía no tienes casos creados."));
+      reemplazar(
+        lista,
+        puedeCrearCasos()
+          ? h(
+              "div",
+              { clase: "vacio tarjeta" },
+              h("p", { clase: "emoji-grande", "aria-hidden": "true" }, "📚"),
+              h("p", { clase: "texto-suave" }, "Todavía no tienes casos. Crea el primero para empezar."),
+              h("button", {
+                type: "button",
+                clase: "boton boton-principal boton-grande",
+                texto: "+ Crear mi primer caso",
+                onclick: () => EditorCasos.crearCaso(abrirEditor),
+              }),
+            )
+          : vacio("Todavía no tienes casos. Pide al administrador el permiso para crearlos."),
+      );
       return;
     }
     reemplazar(
@@ -115,16 +192,72 @@
             h("li", {}, `❓ ${preguntas} preguntas`),
             h("li", {}, `v${caso.version}`),
           ),
-          h("button", {
-            type: "button",
-            clase: "boton boton-principal boton-bloque",
-            texto: publicado ? "Agendar" : "Publica el caso para agendarlo",
-            disabled: !publicado,
-            onclick: () => abrirFormularioAgendar(caso.id),
-          }),
+          h(
+            "div",
+            { clase: "acciones acciones-compactas" },
+            h("button", {
+              type: "button",
+              clase: `boton ${publicado ? "boton-fantasma" : "boton-principal"}`,
+              texto: caso.estado === "BORRADOR" ? "✏ Editar" : "👁 Ver caso",
+              onclick: () => abrirEditor(caso.id),
+            }),
+            publicado &&
+              h("button", {
+                type: "button",
+                clase: "boton boton-principal",
+                texto: "👥 Asignar a estudiantes",
+                onclick: () => abrirFormularioAgendar(caso.id),
+              }),
+          ),
         );
       }),
     );
+  }
+
+  function puedeCrearCasos() {
+    return claims.rol === "ADMINISTRADOR" || (claims.permisos || []).includes("CREAR_CASOS");
+  }
+
+  function mostrarGuia() {
+    const pasos = [
+      ["📝", "Crea un caso", "Escribe la historia, sus escenarios y preguntas con opciones."],
+      ["🚀", "Publícalo", "Cuando la lista de verificación esté completa, queda listo para usarse."],
+      ["👥", "Asígnalo a estudiantes", "Agenda una sesión y convoca a tus estudiantes: cada uno recibe su propio código por correo."],
+      ["▶", "Inicia la sesión", "Los estudiantes entran con su código y juegan el caso."],
+      ["📊", "Revisa los resultados", "Mira notas, aciertos por pregunta y escribe retroalimentación."],
+    ];
+    return h(
+      "details",
+      { clase: "tarjeta guia espaciado" },
+      h("summary", {}, "¿Cómo funciona? (5 pasos)"),
+      h(
+        "ol",
+        { clase: "guia-pasos" },
+        pasos.map(([icono, titulo, texto]) =>
+          h("li", {}, h("span", { "aria-hidden": "true" }, icono), h("div", {}, h("strong", {}, titulo), h("small", { clase: "texto-suave" }, texto))),
+        ),
+      ),
+    );
+  }
+
+  function abrirEditor(casoId) {
+    const vista = $("#vista-detalle");
+    $("#vista-lista").classList.add("oculto");
+    vista.classList.remove("oculto");
+    const volver = () => {
+      vista.classList.add("oculto");
+      $("#vista-lista").classList.remove("oculto");
+      activarSeccion("casos");
+      return cargarCasos();
+    };
+    EditorCasos.abrir(vista, casoId, {
+      alVolver: volver,
+      alAgendar: async (id) => {
+        await volver();
+        abrirFormularioAgendar(id);
+      },
+      alCambiar: () => cargarCasos(),
+    });
   }
 
   /* ---------- sesiones ---------- */
@@ -248,9 +381,9 @@
         h("textarea", {
           id: "f-convocados",
           rows: "4",
-          placeholder: "correo@universidad.edu, Nombre Apellido\nuno por línea",
+          placeholder: "correo@universidad.edu.co, Nombre Apellido\nuno por línea",
         }),
-        h("small", { clase: "ayuda" }, "Un estudiante por línea: correo y nombre separados por coma."),
+        h("small", { clase: "ayuda" }, "Un estudiante por línea: correo y nombre separados por coma. Cada uno recibe su propio código por correo."),
       ),
       botonEnviar,
     );
@@ -347,10 +480,13 @@
     vista.classList.remove("oculto");
     reemplazar(vista, h("p", { clase: "texto-suave" }, "Cargando sesión…"));
     window.scrollTo({ top: 0 });
+    pestanaDetalle = null;
     await pintarDetalle(sesionId);
   }
 
   function volverALista() {
+    if (panelResultados) panelResultados.destruir();
+    panelResultados = null;
     $("#vista-detalle").classList.add("oculto");
     $("#vista-lista").classList.remove("oculto");
     cargarSesiones();
@@ -358,7 +494,9 @@
 
   async function pintarDetalle(sesionId) {
     const vista = $("#vista-detalle");
-    let sesion, convocatorias;
+    if (panelResultados) panelResultados.destruir();
+    panelResultados = null;
+    let sesion, convocatorias, seguimiento, entregas;
     try {
       await asegurarCasos();
       await cargarUsuariosSiAdmin();
@@ -371,6 +509,21 @@
       volverALista();
       return;
     }
+    // Nombre y correo reales de cada convocado (la lista de convocatorias solo trae ids).
+    [seguimiento, entregas] = await Promise.all([
+      Api.get(`/sessions/${sesionId}/seguimiento`).catch(() => null),
+      Api.get(`/sessions/${sesionId}/entregas`).catch(() => []),
+    ]);
+    estado.convocados = {};
+    ((seguimiento && seguimiento.convocados) || []).forEach((registro) => {
+      estado.convocados[registro.convocatoria_id] = { nombre: registro.nombre, correo: registro.correo };
+    });
+    estado.entregas = {};
+    [...entregas]
+      .sort((a, b) => String(a.creada_en).localeCompare(String(b.creada_en)))
+      .forEach((entrega) => {
+        estado.entregas[entrega.destinatario] = entrega.estado;
+      });
 
     const acciones = [];
     if (sesion.estado === "SIN_INICIAR") {
@@ -403,7 +556,7 @@
       );
     }
 
-    const entradaCorreo = h("input", { type: "email", placeholder: "correo@universidad.edu", required: true, inputmode: "email" });
+    const entradaCorreo = h("input", { type: "email", placeholder: "correo@universidad.edu.co", required: true, inputmode: "email" });
     const entradaNombre = h("input", { type: "text", placeholder: "Nombre", required: true });
     const formularioConvocar = h(
       "form",
@@ -429,6 +582,53 @@
       h("button", { type: "submit", clase: "boton boton-fantasma" }, "Convocar"),
     );
 
+    const caso = estado.casos.find((c) => c.id === sesion.caso_id) || null;
+    const aprobatoria = caso && caso.rubrica ? Number(caso.rubrica.nota_aprobatoria) : null;
+    const panelConvocados = h(
+      "section",
+      { clase: "espaciado" },
+      h(
+        "div",
+        { clase: "seccion-cabecera" },
+        h("h3", { clase: "titulo-seccion" }, `Convocados (${convocatorias.length})`),
+        convocatorias.some((c) => !c.revocada_en) &&
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            texto: "📋 Copiar todos los códigos",
+            onclick: () => copiarTodosLosCodigos(sesion, convocatorias),
+          }),
+      ),
+      h(
+        "p",
+        { clase: "ayuda" },
+        "Cada estudiante tiene su propio código y le llega por correo. Aquí puedes verlo, copiarlo o reenviarlo.",
+      ),
+      convocatorias.length
+        ? h("div", { clase: "lista-convocados" }, convocatorias.map((c) => filaConvocado(sesion, c)))
+        : vacio("Aún no hay estudiantes convocados."),
+      h("div", { clase: "tarjeta espaciado" }, h("h4", { clase: "titulo-tarjeta" }, "Convocar a otro estudiante"), formularioConvocar),
+    );
+    const panelDeResultados = h("section", { clase: "espaciado oculto" });
+    const botonConvocados = h("button", { type: "button", clase: "pestana", role: "tab", texto: "👥 Convocados y códigos" });
+    const botonResultados = h("button", { type: "button", clase: "pestana", role: "tab", texto: "📊 Resultados" });
+
+    const mostrarPestana = (nombre) => {
+      pestanaDetalle = nombre;
+      const verResultados = nombre === "resultados";
+      botonConvocados.classList.toggle("activa", !verResultados);
+      botonResultados.classList.toggle("activa", verResultados);
+      botonConvocados.setAttribute("aria-selected", String(!verResultados));
+      botonResultados.setAttribute("aria-selected", String(verResultados));
+      panelConvocados.classList.toggle("oculto", verResultados);
+      panelDeResultados.classList.toggle("oculto", !verResultados);
+      if (verResultados && !panelResultados) {
+        panelResultados = PanelResultados.montar(panelDeResultados, { sesion, caso, aprobatoria });
+      }
+    };
+    botonConvocados.addEventListener("click", () => mostrarPestana("convocados"));
+    botonResultados.addEventListener("click", () => mostrarPestana("resultados"));
+
     reemplazar(
       vista,
       h("button", { type: "button", clase: "boton boton-fantasma boton-chico", texto: "← Volver", onclick: volverALista }),
@@ -452,21 +652,52 @@
         ),
         h("div", { clase: "acciones" }, acciones),
       ),
-      h(
-        "section",
-        { clase: "espaciado" },
-        h("h3", { clase: "titulo-seccion" }, `Convocados (${convocatorias.length})`),
-        convocatorias.length
-          ? h("div", { clase: "lista-convocados" }, convocatorias.map((c) => filaConvocado(sesion, c)))
-          : vacio("Aún no hay estudiantes convocados."),
-        h("div", { clase: "tarjeta espaciado" }, h("h4", { clase: "titulo-tarjeta" }, "Convocar a otro estudiante"), formularioConvocar),
-      ),
+      h("nav", { clase: "pestanas espaciado", role: "tablist", "aria-label": "Secciones de la sesión" }, botonConvocados, botonResultados),
+      panelConvocados,
+      panelDeResultados,
     );
+    mostrarPestana(pestanaDetalle || (sesion.estado === "SIN_INICIAR" ? "convocados" : "resultados"));
+  }
+
+  function datosConvocatoria(convocatoria) {
+    return estado.convocados[convocatoria.id] || datosEstudiante(convocatoria.estudiante_id);
+  }
+
+  async function copiarTodosLosCodigos(sesion, convocatorias) {
+    const lineas = [];
+    try {
+      for (const convocatoria of convocatorias.filter((c) => !c.revocada_en)) {
+        const { codigo } = await Api.get(`/sessions/${sesion.id}/convocatorias/${convocatoria.id}/codigo`);
+        const datos = datosConvocatoria(convocatoria);
+        lineas.push(`${datos ? `${datos.nombre} <${datos.correo}>` : convocatoria.id}: ${codigo}`);
+      }
+    } catch (error) {
+      Aviso.deError(error);
+      return;
+    }
+    const texto = lineas.join("\n");
+    try {
+      await navigator.clipboard.writeText(texto);
+      Aviso.exito(`${lineas.length} código(s) copiados.`);
+    } catch (_) {
+      Modal.hoja("Códigos de la sesión", h("textarea", { rows: String(Math.min(12, lineas.length + 1)), readonly: true }, texto));
+    }
+  }
+
+  async function reenviarCorreo(sesion, convocatoria) {
+    try {
+      await Api.post(`/sessions/${sesion.id}/convocatorias/${convocatoria.id}/reenviar`);
+      Aviso.exito("Correo reenviado: llegará en unos segundos.");
+    } catch (error) {
+      Aviso.deError(error);
+    }
   }
 
   function filaConvocado(sesion, convocatoria) {
-    const datos = datosEstudiante(convocatoria.estudiante_id);
+    const datos = datosConvocatoria(convocatoria);
     const activa = !convocatoria.revocada_en;
+    const entrega = datos ? estado.entregas[datos.correo] : null;
+    const etiquetaEntrega = { ENVIADO: ["✉ Correo enviado", "ok"], PENDIENTE: ["✉ Correo pendiente", "aviso"], FALLIDO: ["✉ Correo falló", "peligro"] }[entrega];
     return h(
       "article",
       { clase: "tarjeta fila-convocado" },
@@ -479,6 +710,7 @@
           !activa ? "Retirado" : convocatoria.codigo_vigente ? "Código vigente" : "Código vencido",
           !activa ? "neutro" : convocatoria.codigo_vigente ? "ok" : "aviso",
         ),
+        activa && etiquetaEntrega && chip(etiquetaEntrega[0], etiquetaEntrega[1]),
       ),
       activa &&
         h(
@@ -486,9 +718,15 @@
           { clase: "fila-convocado-acciones" },
           h("button", {
             type: "button",
-            clase: "boton boton-fantasma boton-chico",
+            clase: "boton boton-info boton-chico",
             texto: "🔑 Ver código",
             onclick: () => mostrarCodigo(sesion, convocatoria, datos),
+          }),
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            texto: "✉ Reenviar",
+            onclick: () => reenviarCorreo(sesion, convocatoria),
           }),
           h("button", {
             type: "button",
@@ -591,6 +829,150 @@
     }
   }
 
+  /* ---------- solicitudes de docentes (solo administrador) ---------- */
+
+  function pintarContadorSolicitudes(cantidad) {
+    $("#pestana-solicitudes").textContent = cantidad
+      ? `📥 Solicitudes (${cantidad})`
+      : "📥 Solicitudes";
+  }
+
+  async function actualizarContadorSolicitudes() {
+    try {
+      const pendientes = await Api.get("/admin/solicitudes", { limite: 100 });
+      pintarContadorSolicitudes(pendientes.length);
+      return pendientes.length;
+    } catch (_) {
+      // El contador es secundario: si falla, la sección muestra el error al abrirse.
+      return 0;
+    }
+  }
+
+  async function cargarSolicitudes() {
+    const lista = $("#lista-solicitudes");
+    let solicitudes;
+    try {
+      solicitudes = await Api.get("/admin/solicitudes", { limite: 100 });
+    } catch (error) {
+      Aviso.deError(error);
+      reemplazar(lista, vacio("No se pudieron cargar las solicitudes."));
+      return;
+    }
+    pintarContadorSolicitudes(solicitudes.length);
+    if (!solicitudes.length) {
+      reemplazar(lista, vacio("No hay solicitudes pendientes."));
+      return;
+    }
+    reemplazar(lista, solicitudes.map(tarjetaSolicitud));
+  }
+
+  function tarjetaSolicitud(solicitud) {
+    return h(
+      "article",
+      { clase: "tarjeta tarjeta-caso aparece" },
+      h(
+        "div",
+        { clase: "tarjeta-fila" },
+        h("h3", { clase: "titulo-tarjeta" }, solicitud.nombre),
+        chip("Pendiente", "aviso"),
+      ),
+      h("p", { clase: "texto-suave" }, solicitud.correo),
+      h("ul", { clase: "meta" }, h("li", {}, `🗓 Registro: ${Fechas.formatear(solicitud.creado_en)}`)),
+      h(
+        "div",
+        { clase: "acciones" },
+        h("button", {
+          type: "button",
+          clase: "boton boton-principal",
+          texto: "Aprobar",
+          onclick: () => abrirAprobar(solicitud),
+        }),
+        h("button", {
+          type: "button",
+          clase: "boton boton-fantasma",
+          texto: "Rechazar",
+          onclick: () => abrirRechazar(solicitud),
+        }),
+      ),
+    );
+  }
+
+  async function abrirAprobar(solicitud) {
+    let permisos;
+    try {
+      permisos = await Api.get("/admin/permissions");
+    } catch (error) {
+      Aviso.deError(error);
+      return;
+    }
+    const casillas = permisos.map((permiso) =>
+      h(
+        "label",
+        { clase: "casilla" },
+        h("input", {
+          type: "checkbox",
+          value: permiso.codigo,
+          checked: permiso.codigo === "CREAR_CASOS",
+        }),
+        h("span", {}, permiso.nombre || permiso.codigo),
+      ),
+    );
+    const boton = h("button", { type: "button", clase: "boton boton-principal boton-bloque" }, "Aprobar docente");
+    const contenido = h(
+      "div",
+      {},
+      h("p", { clase: "texto-suave" }, `${solicitud.nombre} · ${solicitud.correo}`),
+      h("p", { clase: "ayuda" }, "Permisos que tendrá al ingresar:"),
+      casillas.length ? h("div", { clase: "lista-casillas" }, casillas) : h("p", { clase: "texto-suave" }, "No hay permisos definidos."),
+      boton,
+    );
+    const hoja = Modal.hoja("Aprobar solicitud", contenido);
+    boton.addEventListener("click", async () => {
+      const elegidos = [...contenido.querySelectorAll("input:checked")].map((c) => c.value);
+      boton.disabled = true;
+      try {
+        await Api.post(`/admin/solicitudes/${solicitud.id}/aprobar`, { permisos: elegidos });
+        hoja.cerrar();
+        Aviso.exito(`Docente aprobado: ${solicitud.nombre}.`);
+        await cargarSolicitudes();
+      } catch (error) {
+        Aviso.deError(error);
+        boton.disabled = false;
+      }
+    });
+  }
+
+  function abrirRechazar(solicitud) {
+    const motivo = h("textarea", {
+      rows: "3",
+      maxlength: "1000",
+      placeholder: "Motivo (opcional). Se le enviará al docente.",
+    });
+    const boton = h("button", { type: "button", clase: "boton boton-peligro boton-bloque" }, "Rechazar solicitud");
+    const contenido = h(
+      "div",
+      {},
+      h("p", { clase: "texto-suave" }, `${solicitud.nombre} · ${solicitud.correo}`),
+      h("label", { clase: "campo" }, h("span", {}, "Motivo del rechazo"), motivo),
+      boton,
+    );
+    const hoja = Modal.hoja("Rechazar solicitud", contenido);
+    boton.addEventListener("click", async () => {
+      boton.disabled = true;
+      try {
+        await Api.post(`/admin/solicitudes/${solicitud.id}/rechazar`, {
+          motivo: motivo.value.trim() || null,
+        });
+        hoja.cerrar();
+        Aviso.exito("Solicitud rechazada.");
+        await cargarSolicitudes();
+      } catch (error) {
+        Aviso.deError(error);
+        boton.disabled = false;
+      }
+    });
+  }
+
   /* ---------- navegación del panel ---------- */
 
   function activarSeccion(nombre) {
@@ -601,19 +983,35 @@
     });
     $("#seccion-casos").classList.toggle("oculto", nombre !== "casos");
     $("#seccion-sesiones").classList.toggle("oculto", nombre !== "sesiones");
+    $("#seccion-solicitudes").classList.toggle("oculto", nombre !== "solicitudes");
   }
 
   document.querySelectorAll(".pestanas-panel .pestana").forEach((pestana) =>
     pestana.addEventListener("click", () => {
       activarSeccion(pestana.dataset.seccion);
       if (pestana.dataset.seccion === "sesiones") cargarSesiones();
+      if (pestana.dataset.seccion === "solicitudes") cargarSolicitudes();
     }),
   );
   $("#boton-agendar").addEventListener("click", () => abrirFormularioAgendar());
+  if (puedeCrearCasos()) {
+    $("#boton-nuevo-caso").classList.remove("oculto");
+    $("#boton-nuevo-caso").addEventListener("click", () => EditorCasos.crearCaso(abrirEditor));
+  }
   $("#boton-salir").addEventListener("click", () => Api.cerrarSesion());
 
   const usuario = Api.usuario();
   $("#nombre-usuario").textContent = (usuario && usuario.nombre) || "";
   Campana.montar($("#campana"));
+  if (claims.rol === "ADMINISTRADOR") {
+    $("#pestana-solicitudes").classList.remove("oculto");
+    $(".pestanas-panel").classList.add("tres");
+    actualizarContadorSolicitudes().then((pendientes) => {
+      if (!pendientes) return;
+      Aviso.info(`Tienes ${pendientes} solicitud(es) de docentes por aprobar.`);
+      activarSeccion("solicitudes");
+      cargarSolicitudes();
+    });
+  }
   cargarCasos();
 })();

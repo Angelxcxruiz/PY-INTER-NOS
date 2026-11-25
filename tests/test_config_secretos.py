@@ -14,10 +14,12 @@ JWT_VALIDO = "secreto-de-prueba-solo-para-este-test-0123456789"
 def entorno_limpio(monkeypatch):
     monkeypatch.delenv("JWT_SECRET", raising=False)
     monkeypatch.delenv("FERNET_KEY", raising=False)
+    monkeypatch.delenv("DOMINIO_INSTITUCIONAL", raising=False)
 
 
 def crear(**valores) -> Configuracion:
     # _env_file=None: la prueba no debe leer el .env real de quien la ejecuta.
+    valores.setdefault("DOMINIO_INSTITUCIONAL", "prueba.edu")
     return Configuracion(_env_file=None, **valores)
 
 

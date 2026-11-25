@@ -72,6 +72,10 @@ def validador_convocatoria_por_defecto(
                 "debes verificar tu correo antes de ingresar; revisa el enlace que enviamos "
                 "a tu bandeja de entrada"
             )
+        if usuario.estado_cuenta == "SIN_VERIFICAR":
+            raise NoAutenticado(
+                "Verifica tu correo con el código de 6 dígitos del registro antes de ingresar"
+            )
 
         sesion = db.get(Sesion, convocatoria_coincidente.sesion_id)
         if sesion is None:

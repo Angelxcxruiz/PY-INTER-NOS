@@ -57,6 +57,31 @@ El enlace del correo es `{FRONTEND_URL}/verificar-correo?token=...`; el frontend
 - `POST /api/v1/auth/reset-password` (publico): `{"token": "...", "nueva_contrasena": "..."}`.
   El enlace del correo es `{FRONTEND_URL}/restablecer-contrasena?token=...`.
 
+### Registro con verificacion por codigo (requisito nuevo, Fase 11/11b)
+
+Todos publicos (sin token). El codigo de 6 digitos llega por correo y nunca se devuelve en la API.
+
+- `POST /api/v1/auth/registro`: `{"nombre", "correo", "contrasena", "rol"}` con `rol` =
+  `ESTUDIANTE` o `DOCENTE`. Contrasena minima de 8; el dominio de `DOMINIO_INSTITUCIONAL` se exige
+  solo al estudiante (422 si no); el docente puede usar cualquier correo. Correo ya registrado: 409 con mensaje generico. Responde `201`
+  `{usuario_id, correo, mensaje, vigencia_segundos, reenvio_segundos}`; la cuenta queda
+  `SIN_VERIFICAR`.
+- `POST /api/v1/auth/registro/verificar`: `{"correo", "codigo"}`. Correcto: `200`
+  `{mensaje, rol, estado_cuenta}` (`ACTIVO` estudiante, `PENDIENTE` docente). Incorrecto, vencido,
+  usado o con intentos agotados: `400` `CODIGO_INVALIDO` (mismo mensaje siempre).
+- `POST /api/v1/auth/registro/reenviar`: `{"correo"}`. Siempre `200` con el mismo cuerpo. Un envio
+  cada `CODIGO_REGISTRO_COOLDOWN_SEG`.
+- Login de una cuenta `SIN_VERIFICAR`: `401` `CORREO_SIN_VERIFICAR`. Cuenta rechazada: `401`
+  `CUENTA_RECHAZADA`.
+
+### Solicitudes de docentes (ADMINISTRADOR)
+
+- `GET /api/v1/admin/solicitudes`: docentes `PENDIENTE` (paginado; total en `X-Total-Count`).
+- `POST /api/v1/admin/solicitudes/{usuario_id}/aprobar`: `{"permisos": ["CREAR_CASOS"]}` opcional.
+- `POST /api/v1/admin/solicitudes/{usuario_id}/rechazar`: `{"motivo": "..."}` opcional.
+- `GET /api/v1/admin/users?estado_cuenta=PENDIENTE` filtra por estado; la respuesta incluye
+  `estado_cuenta`.
+
 ### Administracion
 
 - `GET /api/v1/admin/users` (ADMINISTRADOR)
@@ -172,5 +197,5 @@ Ejemplo de respuesta:
 ## Interfaz web (fuera de `/api/v1`, no aparece en Swagger)
 
 - `GET /` redirige a `/app/`.
-- `GET /app/` (ingreso), `/app/docente`, `/app/simulador` y `/app/resultado`: páginas HTML.
+- `GET /app/` (ingreso), `/app/registro`, `/app/docente`, `/app/simulador` y `/app/resultado`: páginas HTML.
 - `GET /app/static/*`: CSS y JS de la interfaz.

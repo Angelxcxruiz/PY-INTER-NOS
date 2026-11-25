@@ -32,6 +32,14 @@ class Observador(Protocol):
 
 
 class ObservadorNotificacionInterna:
+    @staticmethod
+    def _administradores(db: Session) -> list[str]:
+        return list(
+            db.scalars(
+                select(Usuario.id).where(Usuario.rol == "ADMINISTRADOR", Usuario.activo.is_(True))
+            ).all()
+        )
+
     def manejar(self, db: Session, evento) -> None:
         payload = evento.payload
         destinatarios: list[tuple[str, str, str]] = []
@@ -71,6 +79,41 @@ class ObservadorNotificacionInterna:
                             evento.tipo,
                             "Tu docente agrego retroalimentacion",
                         )
+                    ]
+
+        elif evento.tipo == "DOCENTE_REGISTRADO":
+            docente = db.get(Usuario, payload.get("usuario_id"))
+            if docente is not None:
+                destinatarios = [
+                    (
+                        admin_id,
+                        evento.tipo,
+                        f"Nuevo docente pendiente de aprobación: {docente.nombre}",
+                    )
+                    for admin_id in self._administradores(db)
+                ]
+        elif evento.tipo == "REGISTRO_VERIFICADO":
+            nuevo = db.get(Usuario, payload.get("usuario_id"))
+            if nuevo is not None:
+                es_docente = nuevo.rol == "DOCENTE"
+                destinatarios = [
+                    (
+                        nuevo.id,
+                        evento.tipo,
+                        "Correo verificado: tu cuenta está en revisión por el administrador."
+                        if es_docente
+                        else "Correo verificado: ¡bienvenido a Inter Nos!",
+                    )
+                ]
+                if es_docente:
+                    # Los administradores se enteran solo cuando el correo ya está verificado.
+                    destinatarios += [
+                        (
+                            admin_id,
+                            evento.tipo,
+                            f"Nuevo docente pendiente de aprobación: {nuevo.nombre}",
+                        )
+                        for admin_id in self._administradores(db)
                     ]
 
         for usuario_id, tipo, mensaje in destinatarios:
@@ -137,6 +180,87 @@ class ObservadorCorreo:
             self._manejar_token(db, evento)
         elif evento.tipo == "VERIFICACION_CORREO_SOLICITADA":
             self._manejar_verificacion(db, evento)
+        elif evento.tipo in {"DOCENTE_APROBADO", "DOCENTE_RECHAZADO"}:
+            self._manejar_decision_docente(db, evento)
+        elif evento.tipo == "REGISTRO_INICIADO":
+            self._manejar_registro_iniciado(db, evento)
+
+    def _manejar_registro_iniciado(self, db: Session, evento) -> None:
+        entrega_previa = db.scalar(
+            select(EntregaCorreo).where(
+                EntregaCorreo.evento_id == evento.id,
+                EntregaCorreo.tipo == evento.tipo,
+            )
+        )
+        if entrega_previa is not None and entrega_previa.estado == "ENVIADO":
+            return
+
+        # El código se genera aquí, justo al construir el correo; en la base queda solo su hash.
+        preparado = ServicioUsuarios(db).preparar_codigo_registro(
+            evento.payload.get("codigo_registro_id")
+        )
+        if preparado is None:
+            return  # ya reemplazado, usado o cuenta verificada: no hay nada que enviar
+        usuario, codigo = preparado
+
+        html, texto = renderizar(
+            "codigo_registro.html",
+            "codigo_registro.txt",
+            {
+                "nombre": usuario.nombre,
+                "codigo": codigo,
+                "vigencia": f"{obtener_configuracion().codigo_registro_expira_min} minutos",
+            },
+        )
+        entrega = self._entrega(db, evento, usuario.correo)
+        entrega.intentos += 1
+        try:
+            self.puerto.enviar(
+                usuario.correo, "Tu código de verificación de Inter Nos", html, texto
+            )
+        except Exception as exc:
+            entrega.estado = "FALLIDO"
+            entrega.ultimo_error = str(exc)
+            raise
+        entrega.estado = "ENVIADO"
+        entrega.ultimo_error = None
+        entrega.enviado_en = ahora()
+
+    def _manejar_decision_docente(self, db: Session, evento) -> None:
+        usuario = db.get(Usuario, evento.payload.get("usuario_id"))
+        # Si el usuario ya no existe no hay a quién avisar: no es un fallo reintentable.
+        if usuario is None:
+            return
+        entrega = self._entrega(db, evento, usuario.correo)
+        if entrega.estado == "ENVIADO":
+            return
+
+        aprobado = evento.tipo == "DOCENTE_APROBADO"
+        plantilla = "docente_aprobado" if aprobado else "docente_rechazado"
+        html, texto = renderizar(
+            f"{plantilla}.html",
+            f"{plantilla}.txt",
+            {
+                "nombre": usuario.nombre,
+                "motivo": usuario.motivo_rechazo,
+                "frontend_url": obtener_configuracion().frontend_url,
+            },
+        )
+        asunto = (
+            "Tu cuenta de docente en Inter Nos fue aprobada"
+            if aprobado
+            else "Tu solicitud de cuenta de docente en Inter Nos"
+        )
+        entrega.intentos += 1
+        try:
+            self.puerto.enviar(usuario.correo, asunto, html, texto)
+        except Exception as exc:
+            entrega.estado = "FALLIDO"
+            entrega.ultimo_error = str(exc)
+            raise
+        entrega.estado = "ENVIADO"
+        entrega.ultimo_error = None
+        entrega.enviado_en = ahora()
 
     def _manejar_verificacion(self, db: Session, evento) -> None:
         entrega_previa = db.scalar(

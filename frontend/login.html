@@ -17,14 +17,14 @@
       <button type="button" class="pestana activa" role="tab" aria-selected="true"
               data-modo="estudiante">🎮 Estudiante</button>
       <button type="button" class="pestana" role="tab" aria-selected="false"
-              data-modo="docente">🎓 Docente / Admin</button>
+              data-modo="docente">🔑 Con contraseña</button>
     </div>
 
     <form id="formulario-login" novalidate autocomplete="on">
       <label class="campo">
-        <span>Correo institucional</span>
+        <span id="etiqueta-correo">Correo</span>
         <input type="email" id="correo" name="correo" inputmode="email"
-               autocomplete="username" required placeholder="nombre@universidad.edu">
+               autocomplete="username" required placeholder="tucorreo@ejemplo.com">
       </label>
       <label class="campo" id="campo-secreto">
         <span id="etiqueta-secreto">Código de la convocatoria</span>
@@ -37,6 +37,12 @@
         ENTRAR
       </button>
     </form>
+
+    <div class="separador-registro">
+      <p class="ayuda centrado">¿Primera vez en Inter Nos?</p>
+      <a class="boton boton-grande boton-fantasma" href="/app/registro?rol=DOCENTE">🎓 Soy docente: crear mi cuenta</a>
+      <a class="boton boton-grande boton-fantasma" href="/app/registro?rol=ESTUDIANTE">🎮 Soy estudiante: crear mi cuenta</a>
+    </div>
   </section>
 </main>
 {% endblock %}

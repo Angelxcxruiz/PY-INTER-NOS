@@ -31,7 +31,7 @@ class SmtpAdapter:
     ) -> None:
         mensaje = EmailMessage()
         mensaje["From"] = self.configuracion.smtp_remitente or (
-            f"no-reply@{self.configuracion.dominio_institucional}"
+            f"no-reply@{self.configuracion.dominio_principal}"
         )
         mensaje["To"] = destinatario
         mensaje["Subject"] = asunto
@@ -52,6 +52,12 @@ class SmtpAdapter:
 
 
 class ConsolaAdapter:
+    """Solo para desarrollo local (EMAIL_BACKEND=console): imprime el correo completo.
+
+    Así se ve el código de verificación sin SMTP ni Mailpit. No usar en producción: el cuerpo
+    del correo contiene códigos y enlaces.
+    """
+
     def enviar(
         self,
         destinatario: str,
@@ -59,7 +65,13 @@ class ConsolaAdapter:
         html: str,
         texto: str,
     ) -> None:
-        del html, texto
+        del html
+        separador = "=" * 64
+        print(
+            f"\n{separador}\n[CORREO - modo consola]\nPara:   {destinatario}\n"
+            f"Asunto: {asunto}\n{separador}\n{texto}\n{separador}\n",
+            flush=True,
+        )
         logger.info("correo: destinatario=%s asunto=%s", destinatario, asunto)
 
 

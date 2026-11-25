@@ -103,3 +103,29 @@ class ServicioNotificaciones:
             },
         )
         self.db.commit()
+
+
+def despachar_outbox(limite: int = 20) -> int:
+    """Procesa el outbox en este mismo proceso, tras responder al usuario.
+
+    Evita depender del worker para correos urgentes (como el código de registro). El outbox
+    sigue siendo la fuente de verdad: si algo falla aquí, el worker lo reintenta con backoff.
+    Nunca lanza: corre en segundo plano y no debe afectar la respuesta ya enviada.
+    """
+    import logging
+
+    from app.core.config import obtener_configuracion
+
+    if not obtener_configuracion().despacho_inmediato:
+        return 0
+    # Importaciones locales: evitan un ciclo con los observadores (que usan el módulo de auth).
+    from app.core.database import SessionLocal
+    from app.modules.notifications.dependencies import construir_despachador
+    from app.modules.notifications.procesador import ProcesadorOutbox
+
+    try:
+        with SessionLocal() as db:
+            return ProcesadorOutbox(db, construir_despachador()).procesar_lote(limite)
+    except Exception:
+        logging.getLogger(__name__).exception("despacho inmediato del outbox fallido")
+        return 0

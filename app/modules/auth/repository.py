@@ -1,7 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import (
+    CodigoRegistro,
     Permiso,
     TokenCorreo,
     Usuario,
@@ -68,11 +69,63 @@ class RepositorioUsuarios:
     def por_correo(self, correo: str) -> Usuario | None:
         return self.db.scalar(select(Usuario).where(Usuario.correo == correo.lower()))
 
-    def listar(self, limite: int, desplazamiento: int) -> list[Usuario]:
+    def listar(
+        self, limite: int, desplazamiento: int, estado_cuenta: str | None = None
+    ) -> list[Usuario]:
+        stmt = select(Usuario)
+        if estado_cuenta is not None:
+            stmt = stmt.where(Usuario.estado_cuenta == estado_cuenta)
+        stmt = stmt.order_by(Usuario.creado_en.desc()).offset(desplazamiento).limit(limite)
+        return list(self.db.scalars(stmt).all())
+
+    def solicitudes_docentes(self, limite: int, desplazamiento: int) -> list[Usuario]:
         stmt = (
-            select(Usuario).order_by(Usuario.creado_en.desc()).offset(desplazamiento).limit(limite)
+            select(Usuario)
+            .where(Usuario.rol == "DOCENTE", Usuario.estado_cuenta == "PENDIENTE")
+            .order_by(Usuario.creado_en)
+            .offset(desplazamiento)
+            .limit(limite)
         )
         return list(self.db.scalars(stmt).all())
+
+    def contar_solicitudes_docentes(self) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(Usuario)
+                .where(Usuario.rol == "DOCENTE", Usuario.estado_cuenta == "PENDIENTE")
+            )
+            or 0
+        )
+
+    def permiso_por_codigo(self, codigo: str) -> Permiso | None:
+        return self.db.scalar(select(Permiso).where(Permiso.codigo == codigo))
+
+    # --- Código de verificación del registro (Fase 11b) --------------------------------------
+
+    def agregar_codigo_registro(self, fila: CodigoRegistro) -> CodigoRegistro:
+        self.db.add(fila)
+        self.db.flush()
+        return fila
+
+    def eliminar_codigos_registro(self, usuario_id: str) -> None:
+        """Deja al usuario sin código activo: hay una sola fila por usuario."""
+        self.db.execute(delete(CodigoRegistro).where(CodigoRegistro.usuario_id == usuario_id))
+        self.db.flush()
+
+    def codigo_registro_por_id(self, codigo_id: str) -> CodigoRegistro | None:
+        return self.db.scalar(
+            select(CodigoRegistro).where(CodigoRegistro.id == codigo_id).with_for_update()
+        )
+
+    def ultimo_codigo_registro(self, usuario_id: str) -> CodigoRegistro | None:
+        return self.db.scalar(
+            select(CodigoRegistro)
+            .where(CodigoRegistro.usuario_id == usuario_id)
+            .order_by(CodigoRegistro.creada_en.desc())
+            .limit(1)
+            .with_for_update()
+        )
 
     def agregar(self, usuario: Usuario) -> Usuario:
         self.db.add(usuario)

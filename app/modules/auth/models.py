@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import CHAR, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,15 @@ class Usuario(Base):
         Boolean, nullable=False, default=False, server_default=sa.false()
     )
     verificado_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    # Fase 11: ACTIVO | PENDIENTE | RECHAZADO. Los usuarios previos quedan ACTIVO.
+    estado_cuenta: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="ACTIVO", server_default="ACTIVO", index=True
+    )
+    aprobado_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    aprobado_por_id: Mapped[str | None] = mapped_column(
+        CHAR(36), ForeignKey("usuario.id", ondelete="SET NULL"), nullable=True
+    )
+    motivo_rechazo: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     permisos: Mapped[list["Permiso"]] = relationship(
         secondary="usuario_permiso",
@@ -94,6 +103,32 @@ class VerificacionCorreo(Base):
     token_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True, unique=True)
     expira_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
     usada_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
+    creada_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+
+class CodigoRegistro(Base):
+    """Código de 6 dígitos para verificar el correo al registrarse (Fase 11b).
+
+    Igual que la verificación de correo de la Fase 9: la fila se reserva en la transacción del
+    registro (su id viaja en el evento) y el código se genera después, al construir el correo.
+    En la base solo queda su hash con clave (HMAC); el código en claro no se puede recuperar.
+    Hay una sola fila por usuario: pedir un código nuevo reemplaza la anterior.
+    """
+
+    __tablename__ = "codigo_registro"
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=uuid_como_texto)
+    usuario_id: Mapped[str] = mapped_column(
+        CHAR(36),
+        ForeignKey("usuario.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nulo hasta que el observador genera el código al construir el correo.
+    codigo_hash: Mapped[str | None] = mapped_column(CHAR(64), nullable=True, index=True)
+    expira_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+    intentos: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    usado_en: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     creada_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
 
 

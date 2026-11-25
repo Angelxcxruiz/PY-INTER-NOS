@@ -6,6 +6,11 @@ Crear Amazon RDS for MySQL 8 en subred privada, copias de seguridad automáticas
 Multi-AZ opcional y Security Group que permita tráfico solo desde EC2/ECS.
 La aplicación usa `DATABASE_URL` con el usuario y secreto administrado por AWS.
 
+La migración `0012_triggers_vistas` crea triggers y un procedimiento. En RDS, que mantiene el
+registro binario activo, hay que poner `log_bin_trust_function_creators = 1` en el *parameter
+group* de la instancia (no hace falta reiniciar); de lo contrario la migración falla con el error
+1419 porque el usuario de la aplicación no tiene `SUPER`.
+
 ## Imagen
 
 Construir la imagen Docker y subirla a Amazon ECR. Cada despliegue usa una etiqueta
