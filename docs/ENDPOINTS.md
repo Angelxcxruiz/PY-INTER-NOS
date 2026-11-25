@@ -170,6 +170,28 @@ Archivos del editor visual (módulo `files`; requieren el permiso `CREAR_CASOS`)
 
 Los archivos se leen en `GET /media/escenarios/<uuid>.<png|jpg>` (fuera de `/api/v1`).
 
+Generación de imágenes con IA (Fase 15; mismo permiso `CREAR_CASOS`):
+
+- `GET /api/v1/archivos/generacion`: `{disponible, motivo, max_por_hora, restantes, largo_max_prompt, tamanos}`.
+  Sirve para activar o no el botón y mostrar cuántas imágenes le quedan al docente esta hora.
+- `POST /api/v1/archivos/generar` → 201 con el mismo formato que la subida. Cuerpo:
+  `{"caso_id": "...", "escenario_id": "...", "prompt": "1 a 500 caracteres", "tamano": "1536x1024"}`;
+  `tamano` es `1024x1024`, `1536x1024` (por defecto) o `1024x1536`. Solo el docente dueño, con el caso en
+  borrador.
+
+| Código | Cuándo |
+|---|---|
+| 401 / 403 / 404 / 409 | sin sesión o permiso / no es dueño del caso / escenario inexistente / caso no borrador |
+| 422 | prompt vacío o de más de 500, tamaño no permitido, o `PROMPT_RECHAZADO` (el proveedor bloqueó el contenido) |
+| 429 | `LIMITE_GENERACION_ALCANZADO` (tope por hora; dice a qué hora de Bogotá puede volver a intentar) o `PROVEEDOR_IMAGENES_SATURADO` |
+| 409 | `GENERACION_EN_CURSO` (ya tiene una generándose) |
+| 502 | el proveedor falló, su respuesta no es una imagen JPG/PNG válida, o la clave/modelo están mal configurados |
+| 503 | `GENERACION_NO_DISPONIBLE`: función desactivada o falta la clave |
+| 504 | `GENERACION_TIEMPO_AGOTADO` |
+
+Los archivos de `GET /archivos` y `POST /archivos/*` traen `origen` (`SUBIDO` o `GENERADO_IA`) y, si fue
+generado, `prompt_generacion`.
+
 Ejemplo minimo para crear una opcion:
 
 ```json

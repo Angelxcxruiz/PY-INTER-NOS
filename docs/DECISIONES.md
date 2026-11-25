@@ -366,9 +366,8 @@ leer variables CSS.
   datos de su composición (hexadecimales guardados), no estilos de la interfaz.
 - **Escritorio para editar, celular para ver**: el editor es para computador (arrastrar capas con el dedo es
   incómodo; en pantallas angostas avisa); lo que se cuida en celular es el resultado en el simulador.
-- **Botón de IA**: visible pero deshabilitado («Llega en la siguiente fase»). La capa de imagen ya admite
-  `origen: "IA"` y `ServicioArchivos.subir` es el punto de entrada para registrar un archivo generado; no se
-  inventó ninguna llamada ni proveedor.
+- **Botón de IA**: en la Fase 14 quedó visible pero deshabilitado; la Fase 15 lo conectó (ver abajo). La capa
+  de imagen ya admitía `origen: "IA"` y `ServicioArchivos.subir` fue el punto de enganche.
 - **Corrección asociada**: el manejador de errores 422 fallaba (500) cuando un validador Pydantic lanzaba
   `ValueError` (la excepción quedaba en `ctx` y no es JSON). Ahora se serializa. Además, `Dom.reemplazar`
   aplanaba un solo nivel y la vista de solo lectura de un caso publicado mostraba «[object HTMLElement]» en
@@ -378,6 +377,53 @@ leer variables CSS.
 - **Limitaciones**: `/media` es público (los nombres son UUID imposibles de adivinar); no hay cuota de
   almacenamiento por docente; al migrar a S3 hay que reescribir la `url` guardada en cada capa de imagen
   (se vuelve a resolver con `archivo_id`); no hay deshacer/rehacer en el editor.
+
+## Fase 15 — Generación de imágenes con IA en el editor visual (ampliación)
+
+- **Puerto y adaptador**: `app/core/generacion_imagenes.py` define `PuertoGeneradorImagenes.generar(prompt,
+  ancho, alto) -> bytes`; `AdaptadorGemini` lo implementa con `httpx` (sin SDK) contra
+  `generateContent`. Las pruebas usan un generador falso y un transporte HTTP simulado: la suite nunca llama a
+  Google (y `conftest.py` pone una clave falsa para que la real del `.env` no se use).
+- **Configuración opcional**: `GEMINI_API_KEY`, `GEMINI_MODELO_IMAGEN` (por defecto `gemini-nano-banana-2.1`,
+  el que cita la documentación de Google; si cambia, se edita el `.env`), `GEMINI_TIMEOUT_SEG=60`,
+  `GENERACION_IMAGENES_ACTIVA=true` y `GENERACION_MAX_POR_HORA=10`. La API **arranca sin la clave** (a
+  diferencia de `JWT_SECRET`/`FERNET_KEY`); el endpoint responde `503` con un mensaje claro. El valor
+  `CAMBIAR-EN-PRODUCCION` cuenta como «sin clave».
+- **La clave nunca se filtra**: es un `SecretStr` (no sale en `repr` ni en `model_dump`), viaja solo en el
+  encabezado `x-goog-api-key` (no en la URL), el adaptador no registra cuerpos de respuesta (solo estado
+  HTTP) y los mensajes de error son propios, no copian lo que diga el proveedor. Hay pruebas que buscan la
+  clave en respuestas y logs.
+- **Tamaños fijos** `1024x1024`, `1536x1024` y `1024x1536` (relaciones `1:1`, `3:2`, `2:3`), validados en el
+  endpoint y mostrados así en el editor.
+- **Permisos**: permiso `CREAR_CASOS`, dueño del caso y caso en borrador. Casos responde esa pregunta
+  (`autorizar_edicion_escenario`) y se inyecta a archivos; los permisos se validan **antes** de revelar si el
+  servicio está configurado.
+- **Tope por hora**: se cuenta en la base (`archivo_adjunto` con origen `GENERADO_IA`, por docente, dentro de
+  la hora de reloj actual, con el reloj inyectable). Cuenta solo las generaciones **exitosas**: un error del
+  proveedor no gasta cupo. Al alcanzarlo responde `429` diciendo a qué hora de Bogotá puede volver. Además,
+  un docente solo puede tener **una generación a la vez** (candado en el proceso; `409`), lo que evita el
+  doble clic y saltarse el tope con peticiones simultáneas.
+- **Atomicidad**: no hay archivo huérfano ni fila sin archivo. Si el proveedor falla, no se escribe nada. Si
+  el proveedor responde bien y falla el guardado, no se crea la fila (y se borra lo que haya quedado a
+  medias). Si el archivo se guardó y falla la fila (o el `commit`), se borra el archivo. La escritura local
+  usa un temporal que se renombra, para que una interrupción no deje un archivo parcial.
+  `ServicioArchivos.subir` hace `commit` solo al final, tras escribir el archivo; `generar_imagen` lo reutiliza
+  y por eso no necesita otra transacción. Lo único que no es atómico es lo inevitable: si el proceso muere
+  entre escribir y confirmar, puede quedar un archivo sin fila (no al revés).
+- **Origen y prompt** (`0015_origen_archivos`): `origen` (`SUBIDO` por defecto, para no tocar los archivos
+  existentes; `CHECK` con `SUBIDO`/`GENERADO_IA`) y `prompt_generacion`. La galería marca con «✨ IA» lo
+  generado y deja ver el prompt para ajustarlo y regenerar. Las capas de imagen guardan `origen: "IA"`.
+- **Errores del proveedor**, traducidos al español: `429` → «saturado» (código distinto al del tope por hora);
+  contenido bloqueado (400 con razón de seguridad, o respuesta sin imagen por bloqueo) → `422
+  PROMPT_RECHAZADO`; tiempo agotado → `504` («tardó demasiado, inténtalo de nuevo»); 401/403/404 →
+  `502` de configuración (clave o modelo, sin detalles); otros → `502`.
+- **Vista previa = ya guardada**: como la generación y el guardado son una sola unidad, la imagen que se
+  previsualiza ya está en la biblioteca; «Agregar al lienzo» solo la coloca. Si el docente no la quiere, la
+  borra desde la galería.
+- **Limitaciones**: el tope cuenta exitosas (una petición facturada que luego falle no se cuenta); el candado
+  de una generación a la vez es por proceso; las imágenes generadas llevan marca de agua SynthID del
+  proveedor; el modelo por defecto sigue la documentación de Google a la fecha y no se pudo probar con la
+  clave del proyecto (ver reporte de la fase).
 
 ## Limitaciones conocidas
 

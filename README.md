@@ -135,6 +135,12 @@ El docente también puede armar la imagen de cada escenario con el **editor visu
 Las imágenes que sube (JPG o PNG, máx. 5 MB) quedan en `uploads/` (ignorada por git) y se sirven en
 `/media`; la carpeta se cambia con `ALMACENAMIENTO_DIR`.
 
+**Imágenes con IA (opcional).** Dentro del editor, «✨ Generar imagen con IA» crea la imagen con Gemini a
+partir de una descripción. Requiere una clave de **Google AI Studio** (https://aistudio.google.com/apikey,
+empieza por `AIza`) en `GEMINI_API_KEY` dentro de tu `.env`; sin ella el botón avisa que no está
+configurado y todo lo demás funciona igual. Ver `.env.example` para el modelo, el tiempo máximo y el tope
+por hora.
+
 ### Registro con código de verificación
 
 `/app/registro` crea la cuenta; luego pide el código de 6 dígitos enviado al correo. El docente

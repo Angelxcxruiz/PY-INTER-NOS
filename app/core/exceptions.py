@@ -43,6 +43,31 @@ class ErrorArchivoDemasiadoGrande(ErrorDominio):
     estado_http = 413
 
 
+class ErrorServicioNoDisponible(ErrorDominio):
+    codigo = "SERVICIO_NO_DISPONIBLE"
+    estado_http = 503
+
+
+class ErrorLimiteExcedido(ErrorDominio):
+    codigo = "LIMITE_EXCEDIDO"
+    estado_http = 429
+
+
+class ErrorProveedorExterno(ErrorDominio):
+    codigo = "PROVEEDOR_EXTERNO_FALLIDO"
+    estado_http = 502
+
+
+class ErrorTiempoAgotado(ErrorDominio):
+    codigo = "TIEMPO_AGOTADO"
+    estado_http = 504
+
+
+class ErrorAlmacenamiento(ErrorDominio):
+    codigo = "ALMACENAMIENTO_FALLIDO"
+    estado_http = 500
+
+
 class ErrorTipoArchivo(ErrorDominio):
     codigo = "TIPO_ARCHIVO_NO_PERMITIDO"
     estado_http = 415

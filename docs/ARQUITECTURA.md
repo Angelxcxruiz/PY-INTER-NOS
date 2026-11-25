@@ -13,6 +13,8 @@ Inter Nos usa un monolito modular por capas.
 - Los modulos se comunican mediante servicios, nunca mediante repositorios o modelos internos.
 - Los archivos subidos se piden al puerto `PuertoAlmacenamiento` (`app/core/almacenamiento.py`); ningun
   modulo escribe en disco directamente. Hoy es disco local; S3 queda reservado.
+- Las imagenes generadas con IA se piden al puerto `PuertoGeneradorImagenes`
+  (`app/core/generacion_imagenes.py`); hoy lo implementa `AdaptadorGemini`.
 
 ## Convenciones
 

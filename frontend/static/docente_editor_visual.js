@@ -70,6 +70,7 @@ const EditorVisual = (() => {
     let accion = null; // arrastre o cambio de tamaño en curso
     let campos = {}; // inputs numéricos de la capa seleccionada, para refrescarlos al arrastrar
     let archivos = null; // biblioteca de imágenes del docente
+    let estadoIA = null; // ¿se puede generar con IA? cuántas quedan esta hora
 
     const zona = h("div", { clase: "ev-zona" });
     const vista = Composicion.montar(zona, comp);
@@ -223,7 +224,7 @@ const EditorVisual = (() => {
         tipo: "imagen",
         archivo_id: archivo.id,
         url: archivo.url,
-        origen: "SUBIDA",
+        origen: archivo.origen === "GENERADO_IA" ? "IA" : "SUBIDA",
         ajuste: "contener",
         opacidad: 1,
         ancho: redondear(medidas.ancho * factor),
@@ -620,26 +621,60 @@ const EditorVisual = (() => {
       pintarBiblioteca();
     }
 
+    function verPrompt(archivo) {
+      const cuerpo = h(
+        "div",
+        { clase: "ev-ia-dialogo" },
+        h("p", { clase: "ayuda" }, "Descripción con la que se generó esta imagen. Puedes ajustarla y generar otra."),
+        h("blockquote", { clase: "ev-prompt" }, archivo.prompt_generacion),
+        h(
+          "div",
+          { clase: "ev-fila-botones" },
+          boton("✨ Ajustar y regenerar", () => {
+            hoja.cerrar();
+            abrirGenerador({ prompt: archivo.prompt_generacion });
+          }, { clase: "boton-info" }),
+          boton("Agregar al lienzo", () => {
+            hoja.cerrar();
+            agregarImagen(archivo);
+          }),
+        ),
+      );
+      const hoja = Modal.hoja("✨ Imagen generada con IA", cuerpo);
+    }
+
     function pintarBiblioteca() {
       if (archivos === null) {
         Dom.reemplazar(biblioteca, h("p", { clase: "ayuda" }, "Cargando tus imágenes…"));
         return;
       }
       if (!archivos.length) {
-        Dom.reemplazar(biblioteca, h("p", { clase: "ayuda" }, "Aún no has subido imágenes."));
+        Dom.reemplazar(biblioteca, h("p", { clase: "ayuda" }, "Aún no has subido ni generado imágenes."));
         return;
       }
       Dom.reemplazar(
         biblioteca,
-        archivos.map((archivo) =>
-          h(
+        archivos.map((archivo) => {
+          const generada = archivo.origen === "GENERADO_IA";
+          return h(
             "div",
-            { clase: "ev-miniatura" },
+            { clase: `ev-miniatura ${generada ? "ev-miniatura-ia" : ""}` },
             h(
               "button",
               { type: "button", clase: "ev-miniatura-boton", title: `Agregar «${archivo.nombre_original}»`, onclick: () => agregarImagen(archivo) },
-              h("img", { src: archivo.url, alt: archivo.nombre_original, draggable: "false" }),
+              h("img", { src: archivo.url, alt: generada ? "Imagen generada con IA" : archivo.nombre_original, draggable: "false" }),
             ),
+            generada && h("span", { clase: "ev-insignia-ia", title: "Generada con IA" }, "✨ IA"),
+            generada &&
+              archivo.prompt_generacion &&
+              h("button", {
+                type: "button",
+                clase: "ev-miniatura-prompt",
+                "aria-label": "Ver la descripción con la que se generó",
+                title: "Ver la descripción (prompt)",
+                texto: "ℹ",
+                onclick: () => verPrompt(archivo),
+              }),
             h("button", {
               type: "button",
               clase: "ev-miniatura-borrar",
@@ -663,9 +698,131 @@ const EditorVisual = (() => {
                 }
               },
             }),
+          );
+        }),
+      );
+    }
+
+    /* ---------- generar con IA ---------- */
+
+    async function cargarEstadoIA() {
+      try {
+        estadoIA = await Api.get("/archivos/generacion");
+      } catch (_) {
+        estadoIA = { disponible: false, motivo: "No se pudo comprobar si la generación está disponible.", restantes: 0, max_por_hora: 0, largo_max_prompt: 500, tamanos: [] };
+      }
+      pintarHerramientas();
+    }
+
+    function tamanoSugerido() {
+      if (comp.ancho > comp.alto) return "1536x1024";
+      return comp.ancho < comp.alto ? "1024x1536" : "1024x1024";
+    }
+
+    function abrirGenerador({ prompt = "" } = {}) {
+      const estado = estadoIA;
+      const tamanos = estado.tamanos;
+      let elegido = tamanos.some((t) => t.valor === tamanoSugerido()) ? tamanoSugerido() : (tamanos[0] || {}).valor;
+      let generada = null;
+
+      const area = h("textarea", {
+        rows: 4,
+        maxlength: estado.largo_max_prompt,
+        placeholder: "Ej.: Un pasillo de universidad al atardecer, ilustración plana, sin texto",
+        "aria-label": "Descripción de la imagen",
+      });
+      area.value = prompt;
+      const contador = h("small", { clase: "ayuda" });
+      const cupo = h("small", { clase: "ayuda" });
+      const resultado = h("div", { clase: "ev-ia-resultado", "aria-live": "polite" });
+      const botonGenerar = h("button", { type: "button", clase: "boton boton-principal", texto: "✨ Generar imagen" });
+      const botonAgregar = h("button", { type: "button", clase: "boton boton-info oculto", texto: "Agregar al lienzo" });
+
+      const opciones = h(
+        "div",
+        { clase: "ev-segmentos", role: "radiogroup", "aria-label": "Forma de la imagen" },
+        tamanos.map((t) =>
+          h(
+            "label",
+            { clase: "ev-opcion-tamano" },
+            h("input", {
+              type: "radio",
+              name: "tamano-ia",
+              value: t.valor,
+              checked: t.valor === elegido,
+              onchange: () => (elegido = t.valor),
+            }),
+            h("span", {}, `${t.etiqueta} (${t.ancho} × ${t.alto})`),
           ),
         ),
       );
+
+      function refrescar() {
+        contador.textContent = `${area.value.length} / ${estado.largo_max_prompt}`;
+        cupo.textContent = `Te quedan ${estado.restantes} de ${estado.max_por_hora} imágenes esta hora.`;
+        botonGenerar.disabled = !estado.disponible || estado.restantes <= 0 || !area.value.trim();
+      }
+      area.addEventListener("input", refrescar);
+
+      function error(mensaje) {
+        Dom.reemplazar(resultado, h("p", { clase: "ev-ia-error", role: "alert" }, mensaje));
+      }
+
+      botonGenerar.addEventListener("click", async () => {
+        botonGenerar.disabled = true;
+        botonGenerar.classList.add("cargando");
+        botonAgregar.classList.add("oculto");
+        Dom.reemplazar(resultado, h("p", { clase: "ayuda" }, "Generando la imagen… puede tardar hasta un minuto."));
+        try {
+          generada = await Api.post("/archivos/generar", {
+            caso_id: casoId,
+            escenario_id: escenario.id,
+            prompt: area.value.trim(),
+            tamano: elegido,
+          });
+          archivos = [generada, ...(archivos || [])];
+          pintarBiblioteca();
+          Dom.reemplazar(
+            resultado,
+            h("img", { src: generada.url, alt: "Imagen generada con IA", clase: "ev-ia-vista" }),
+            h("p", { clase: "ayuda" }, "Ya está en tu biblioteca. Si no te convence, ajusta la descripción y vuelve a generar."),
+          );
+          botonAgregar.classList.remove("oculto");
+        } catch (fallo) {
+          error(Api.mensajeDe(fallo));
+        } finally {
+          botonGenerar.classList.remove("cargando");
+          try {
+            estadoIA = await Api.get("/archivos/generacion");
+            Object.assign(estado, estadoIA);
+          } catch (_) {
+            // el cupo se refresca la próxima vez
+          }
+          refrescar();
+          pintarHerramientas();
+        }
+      });
+      botonAgregar.addEventListener("click", () => {
+        hoja.cerrar();
+        if (generada) agregarImagen(generada);
+      });
+
+      const cuerpo = h(
+        "div",
+        { clase: "ev-ia-dialogo" },
+        h("p", { clase: "ev-nota-ia" }, "💡 La imagen es el contexto del escenario; no marques la respuesta correcta ni des pistas."),
+        estado.disponible ? null : h("p", { clase: "ev-ia-error", role: "alert" }, estado.motivo),
+        h("label", { clase: "campo" }, h("span", {}, "Describe la imagen"), area),
+        contador,
+        h("span", { clase: "ev-etiqueta" }, "Forma"),
+        opciones,
+        cupo,
+        h("div", { clase: "ev-fila-botones" }, botonGenerar, botonAgregar),
+        resultado,
+      );
+      const hoja = Modal.hoja("✨ Generar imagen con IA", cuerpo);
+      refrescar();
+      area.focus();
     }
 
     function cambiarFormato(valor) {
@@ -723,8 +880,23 @@ const EditorVisual = (() => {
         h(
           "div",
           { clase: "ev-ia" },
-          h("button", { type: "button", clase: "boton boton-fantasma boton-chico", disabled: true, title: "Llega en la siguiente fase" }, "✨ Generar imagen con IA"),
-          h("small", { clase: "ayuda" }, "Llega en la siguiente fase."),
+          h("button", {
+            type: "button",
+            clase: "boton boton-info boton-chico",
+            disabled: !estadoIA || !estadoIA.disponible,
+            title: estadoIA && !estadoIA.disponible ? estadoIA.motivo : "Generar una imagen con IA",
+            texto: "✨ Generar imagen con IA",
+            onclick: () => abrirGenerador(),
+          }),
+          h(
+            "small",
+            { clase: "ayuda" },
+            !estadoIA
+              ? "Comprobando…"
+              : estadoIA.disponible
+                ? `Te quedan ${estadoIA.restantes} de ${estadoIA.max_por_hora} esta hora.`
+                : estadoIA.motivo,
+          ),
         ),
       );
     }
@@ -875,6 +1047,7 @@ const EditorVisual = (() => {
       pintarCapas();
       pintarBiblioteca();
       cargarBiblioteca();
+      cargarEstadoIA();
     }
     vista.ajustar();
   }
