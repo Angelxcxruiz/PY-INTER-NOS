@@ -223,9 +223,40 @@
     estado.puzle = null;
   }
 
+  /* ---------- fondo del escenario (composición del editor visual) ---------- */
+
+  let fondoActual = null; // { escenarioId, destruir }
+
+  function quitarFondo() {
+    if (fondoActual) fondoActual.destruir();
+    fondoActual = null;
+    document.body.classList.remove("con-escena");
+    document.body.style.removeProperty("--velo-escena");
+  }
+
+  /* Pone la composición del escenario detrás del contenido; sin composición, quita el fondo. */
+  function fondoEscena(escenario) {
+    const composicion = escenario && escenario.composicion;
+    if (!composicion) {
+      quitarFondo();
+      return;
+    }
+    if (fondoActual && fondoActual.escenarioId === escenario.id) return;
+    quitarFondo();
+    const montado = Composicion.montarFondo(composicion);
+    document.body.prepend(montado.el);
+    document.body.classList.add("con-escena");
+    fondoActual = { escenarioId: escenario.id, destruir: montado.destruir };
+    // Panel oscuro y legible siempre; más opaco si el fondo es claro (o si hay imágenes, que no se miden).
+    const claridad = Composicion.claridad(composicion);
+    const velo = claridad === null ? 0.84 : claridad > 0.45 ? 0.92 : claridad > 0.3 ? 0.82 : 0.68;
+    document.body.style.setProperty("--velo-escena", String(velo));
+  }
+
   /* ---------- briefing ---------- */
 
   function mostrarBriefing(enCurso, resultadoPrevio) {
+    quitarFondo();
     hud.classList.add("oculto");
     barraBriefing.classList.remove("oculto");
     const caso = estado.caso;
@@ -374,6 +405,7 @@
 
   function pintarCapitulo(capitulo, continuar) {
     limpiarPuzle();
+    fondoEscena(capitulo.escenario);
     contador(`Capítulo ${capitulo.indice + 1} de ${estado.capitulos.length}`);
     const hayAtras = estado.modo !== "lineal" || capitulo.indice > 0;
     Dom.reemplazar(
@@ -405,6 +437,7 @@
 
   function pintarPuzzle(capitulo, puzzle, k, total, continuar, volver) {
     limpiarPuzle();
+    fondoEscena(capitulo.escenario);
     contador(total > 1 ? `🧩 Puzle ${k + 1} de ${total}` : "🧩 Puzle");
     const hayAtras = estado.modo !== "lineal" || capitulo.indice > 0;
     estado.puzle = Puzzles.montar(escena, puzzle, {
@@ -424,6 +457,7 @@
 
   function mostrarMapa() {
     limpiarPuzle();
+    quitarFondo();
     contador("🗺 Mapa de capítulos");
     const conProgreso = estado.modo === "mapa-progreso";
     const siguiente = estado.capitulos.find(
@@ -510,6 +544,7 @@
 
   function pintarPregunta(paso) {
     const { pregunta, escenario } = paso;
+    fondoEscena(escenario);
     const indice = estado.indice;
     const ultima = indice === estado.preguntas.length - 1;
     const enMapa = estado.modo !== "lineal";

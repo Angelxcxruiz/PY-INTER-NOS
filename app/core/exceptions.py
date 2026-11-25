@@ -38,6 +38,16 @@ class ErrorConflicto(ErrorDominio):
     estado_http = 409
 
 
+class ErrorArchivoDemasiadoGrande(ErrorDominio):
+    codigo = "ARCHIVO_DEMASIADO_GRANDE"
+    estado_http = 413
+
+
+class ErrorTipoArchivo(ErrorDominio):
+    codigo = "TIPO_ARCHIVO_NO_PERMITIDO"
+    estado_http = 415
+
+
 class ErrorAutenticacion(ErrorDominio):
     codigo = "NO_AUTENTICADO"
     estado_http = 401

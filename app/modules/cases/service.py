@@ -13,6 +13,7 @@ from app.core.exceptions import (
 )
 from app.modules.cases.models import (
     Caso,
+    ComposicionEscenario,
     CriterioRubrica,
     Escenario,
     Opcion,
@@ -32,15 +33,30 @@ from app.modules.cases.schemas import (
     PreguntaDocenteEntrada,
     RubricaEntrada,
 )
+from app.modules.cases.schemas_composicion import ComposicionEntrada
 from app.modules.cases.schemas_puzzles import PuzzleEntrada
 from app.modules.cases.validacion import validar_caso_para_publicar
+from app.modules.files.service import ServicioArchivos
 
 
 class ServicioCasos:
-    def __init__(self, db: Session, reloj: Reloj | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        reloj: Reloj | None = None,
+        archivos: ServicioArchivos | None = None,
+    ) -> None:
         self.db = db
         self.repositorio = RepositorioCasos(db)
         self.reloj = reloj
+        self._archivos = archivos
+
+    @property
+    def archivos(self) -> ServicioArchivos:
+        # Los archivos se piden a su propio servicio (nunca a su repositorio ni a sus modelos).
+        if self._archivos is None:
+            self._archivos = ServicioArchivos(self.db, esta_en_uso=self.archivo_en_uso)
+        return self._archivos
 
     def momento(self):
         return ahora(self.reloj)
@@ -460,6 +476,69 @@ class ServicioCasos:
             raise ErrorPermiso("No tiene permisos para realizar esta accion")
         return verificar(puzzle.tipo, puzzle.contenido, respuesta)
 
+    def _escenario_del_caso(self, caso: Caso, escenario_id: str) -> Escenario:
+        escenario = self.repositorio.escenario_por_id(escenario_id)
+        if escenario is None or escenario.caso_id != caso.id:
+            raise ErrorNoEncontrado("Escenario no encontrado")
+        return escenario
+
+    def obtener_composicion(
+        self, caso_id: str, escenario_id: str, sesion: dict
+    ) -> ComposicionEscenario | None:
+        caso = self.obtener(caso_id, sesion)
+        return self._escenario_del_caso(caso, escenario_id).composicion
+
+    def guardar_composicion(
+        self,
+        caso_id: str,
+        escenario_id: str,
+        sesion: dict,
+        solicitud: ComposicionEntrada,
+    ) -> ComposicionEscenario:
+        """Crea o reemplaza la composición del escenario (una por escenario, sin historial)."""
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        escenario = self._escenario_del_caso(caso, escenario_id)
+
+        capas = [capa.model_dump(mode="json") for capa in solicitud.capas]
+        imagenes = [capa for capa in capas if capa["tipo"] == "imagen"]
+        urls = self.archivos.resolver_urls(
+            [capa["archivo_id"] for capa in imagenes],
+            {sesion["sub"], caso.docente_creador_id},
+        )
+        for capa in imagenes:
+            capa["url"] = urls[capa["archivo_id"]]
+
+        momento = self.momento()
+        composicion = escenario.composicion
+        if composicion is None:
+            composicion = ComposicionEscenario(escenario=escenario, creado_en=momento)
+        composicion.ancho = solicitud.ancho
+        composicion.alto = solicitud.alto
+        composicion.fondo_color = solicitud.fondo_color
+        composicion.capas = capas
+        composicion.actualizado_en = momento
+        self.repositorio.registrar(composicion)
+        caso.actualizado_en = momento
+        self.db.commit()
+        self.db.refresh(composicion)
+        return composicion
+
+    def eliminar_composicion(self, caso_id: str, escenario_id: str, sesion: dict) -> None:
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        escenario = self._escenario_del_caso(caso, escenario_id)
+        if escenario.composicion is None:
+            raise ErrorNoEncontrado("El escenario no tiene composición")
+        escenario.composicion = None
+        caso.actualizado_en = self.momento()
+        self.db.commit()
+
+    def archivo_en_uso(self, archivo_id: str) -> bool:
+        return self.repositorio.archivo_en_uso(archivo_id)
+
     def reordenar(self, caso_id: str, tipo: str, ids: list[str], sesion: dict) -> None:
         caso = self._obtener(caso_id)
         self._verificar_acceso(caso, sesion)
@@ -616,6 +695,18 @@ class ServicioCasos:
                 contexto=escenario.contexto,
             )
             self.repositorio.registrar(escenario_nuevo)
+            if escenario.composicion is not None:
+                self.repositorio.registrar(
+                    ComposicionEscenario(
+                        escenario=escenario_nuevo,
+                        ancho=escenario.composicion.ancho,
+                        alto=escenario.composicion.alto,
+                        fondo_color=escenario.composicion.fondo_color,
+                        capas=copy.deepcopy(escenario.composicion.capas),
+                        creado_en=momento,
+                        actualizado_en=momento,
+                    )
+                )
             for puzzle in escenario.puzzles:
                 self.repositorio.registrar(
                     Puzzle(

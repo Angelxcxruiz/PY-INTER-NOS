@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
+from app.core.almacenamiento import directorio_media
 from app.core.config import obtener_configuracion
 from app.core.database import SessionLocal
 from app.core.error_handlers import registrar_manejadores
@@ -15,6 +16,7 @@ from app.modules.auth.router import router_administracion
 from app.modules.cases.router import router as router_casos
 from app.modules.cases.router import router_puzzles
 from app.modules.evaluations.router import router as router_evaluaciones
+from app.modules.files.router import router as router_archivos
 from app.modules.notifications.router import router as router_notificaciones
 from app.modules.participations.router import router as router_participaciones
 from app.modules.reports.router import router as router_reportes
@@ -43,6 +45,7 @@ app.include_router(router_autenticacion, prefix="/api/v1")
 app.include_router(router_administracion, prefix="/api/v1")
 app.include_router(router_casos, prefix="/api/v1")
 app.include_router(router_puzzles, prefix="/api/v1")
+app.include_router(router_archivos, prefix="/api/v1")
 app.include_router(router_sesiones, prefix="/api/v1")
 app.include_router(router_participaciones, prefix="/api/v1")
 app.include_router(router_evaluaciones, prefix="/api/v1")
@@ -53,6 +56,8 @@ app.mount(
     StaticFiles(directory=str(DIRECTORIO_FRONTEND / "static")),
     name="static",
 )
+# Imágenes subidas por los docentes (almacenamiento local). Con S3 este montaje deja de usarse.
+app.mount("/media", StaticFiles(directory=str(directorio_media())), name="media")
 
 
 def _version_estaticos() -> str:

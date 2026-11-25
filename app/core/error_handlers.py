@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError
@@ -17,6 +18,18 @@ def respuesta_error(codigo: str, mensaje: str, detalles: dict | None = None) -> 
             "detalles": detalles or {},
         }
     }
+
+
+def _errores_serializables(errores: list) -> list:
+    """Un validador que lanza ValueError deja la excepción en `ctx`, que no es JSON."""
+    return jsonable_encoder(
+        [
+            {**error, "ctx": {clave: str(valor) for clave, valor in error["ctx"].items()}}
+            if "ctx" in error
+            else error
+            for error in errores
+        ]
+    )
 
 
 def registrar_manejadores(app: FastAPI) -> None:
@@ -52,7 +65,7 @@ def registrar_manejadores(app: FastAPI) -> None:
         exc: RequestValidationError,
     ) -> JSONResponse:
         del request
-        detalles = {"errores": exc.errors()}
+        detalles = {"errores": _errores_serializables(exc.errors())}
         return JSONResponse(
             status_code=422,
             content=respuesta_error("VALIDACION_FALLIDA", "Datos invalidos", detalles),

@@ -326,6 +326,59 @@ leer variables CSS.
   uno por fuerza bruta no da ninguna ventaja académica.
 - Los ejemplos del caso semilla están marcados «[EJEMPLO — validar con docente]».
 
+## Fase 14 — Editor visual de escenarios (ampliación)
+
+- **Qué es**: el docente arma la imagen de cada escenario con capas (imagen, texto, forma, icono) en
+  un editor visual. Se guarda la **composición** (capas en JSON), no una imagen plana, para poder
+  editarla de nuevo. Es un escenario, una composición: guardar otra vez la reemplaza y no hay
+  historial (para versiones ya existe `new-version`, que también copia la composición).
+- **Datos** (migración `0014_composiciones`): `composicion_escenario` (FK única a `escenario`, `ON DELETE
+  CASCADE`; `ancho`, `alto`, `fondo_color`, `capas` JSON) y `archivo_adjunto` (quién subió qué, tipo,
+  tamaño y ruta, para poder borrarlo y migrarlo a S3). Las capas se validan con Pydantic
+  (`app/modules/cases/composicion.py`): colores `#RRGGBB`, iconos de un conjunto fijo, 60 capas como máximo,
+  ids únicos y `orden` (z-index) renumerado 1..n por el servidor.
+- **Almacenamiento detrás de un puerto**: `app/core/almacenamiento.py` define `PuertoAlmacenamiento`
+  (`guardar`, `url_publica`, `eliminar`). Ningún módulo escribe en disco: piden el puerto.
+  `AlmacenamientoLocal` guarda en `uploads/escenarios/` (se sirve en `/media`, y `uploads/` está en
+  `.gitignore`); `AlmacenamientoS3` es una clase documentada que lanza `NotImplementedError`. Se elige con
+  `ALMACENAMIENTO_BACKEND` y `ALMACENAMIENTO_DIR`.
+- **Subida segura**: JPG o PNG de hasta 5 MB. El tipo se decide por los **primeros bytes** del archivo (no por
+  la extensión ni el `Content-Type`); el archivo se guarda con un UUID como nombre, nunca con el nombre
+  original. Tamaño excedido → `413`; tipo no permitido → `415`; vacío → `422`.
+- **Módulo `files`** separado del de casos: sube, lista y borra archivos. Casos le pide las URLs a través de
+  su servicio (`ServicioArchivos.resolver_urls`) y exige que la imagen sea del docente o del dueño del caso.
+  La regla «no se borra una imagen en uso» la responde casos por inyección (`esta_en_uso`), para no crear una
+  dependencia circular entre módulos. La URL de cada imagen la **pone el servidor** al guardar.
+- **Solo en borrador**: guardar o quitar la composición de un caso publicado da `409`, igual que el resto del
+  contenido del caso.
+- **El estudiante la ve**: va anidada como `composicion` en cada escenario de
+  `GET /cases/{id}/vista-estudiante` (`null` si no existe; entonces el simulador muestra solo el texto como
+  antes). El estudiante no recibe metadatos de edición. Se dibuja como fondo de la pantalla del escenario
+  mientras lee el contexto, juega los puzzles y responde. El panel de contenido se oscurece solo: más opaco si
+  el color de fondo es claro o si hay imágenes (su claridad no se mide en el navegador).
+- **RF-14**: la imagen es contexto. El código no puede impedir que el docente dibuje la respuesta sobre ella,
+  así que el editor lo recuerda: «La imagen es el contexto del escenario; no marques la respuesta correcta ni
+  des pistas».
+- **Iconos**: 12 SVG propios en `frontend/static/iconos/` (sin librerías ni CDN); se pintan con `mask-image`
+  para poder cambiarles el color. Una prueba exige que el conjunto permitido en el servidor y los archivos
+  coincidan.
+- **Colores**: la paleta del editor sale de las variables CSS del logo. Los colores que elige el docente son
+  datos de su composición (hexadecimales guardados), no estilos de la interfaz.
+- **Escritorio para editar, celular para ver**: el editor es para computador (arrastrar capas con el dedo es
+  incómodo; en pantallas angostas avisa); lo que se cuida en celular es el resultado en el simulador.
+- **Botón de IA**: visible pero deshabilitado («Llega en la siguiente fase»). La capa de imagen ya admite
+  `origen: "IA"` y `ServicioArchivos.subir` es el punto de entrada para registrar un archivo generado; no se
+  inventó ninguna llamada ni proveedor.
+- **Corrección asociada**: el manejador de errores 422 fallaba (500) cuando un validador Pydantic lanzaba
+  `ValueError` (la excepción quedaba en `ctx` y no es JSON). Ahora se serializa. Además, `Dom.reemplazar`
+  aplanaba un solo nivel y la vista de solo lectura de un caso publicado mostraba «[object HTMLElement]» en
+  lugar de sus escenarios; ahora aplana todos los niveles.
+- **Marca registrada**: la funcionalidad se llama «editor visual de escenarios»; una prueba falla si alguna
+  marca ajena aparece en código, interfaz o documentación.
+- **Limitaciones**: `/media` es público (los nombres son UUID imposibles de adivinar); no hay cuota de
+  almacenamiento por docente; al migrar a S3 hay que reescribir la `url` guardada en cada capa de imagen
+  (se vuelve a resolver con `archivo_id`); no hay deshacer/rehacer en el editor.
+
 ## Limitaciones conocidas
 
 - La lista de convocados del docente no trae correo ni nombre (`ConvocatoriaSalida` solo expone

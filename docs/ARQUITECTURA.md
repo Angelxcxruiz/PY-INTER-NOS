@@ -11,6 +11,8 @@ Inter Nos usa un monolito modular por capas.
 - Los servicios controlan transacciones y reglas de negocio.
 - Los repositorios ejecutan persistencia.
 - Los modulos se comunican mediante servicios, nunca mediante repositorios o modelos internos.
+- Los archivos subidos se piden al puerto `PuertoAlmacenamiento` (`app/core/almacenamiento.py`); ningun
+  modulo escribe en disco directamente. Hoy es disco local; S3 queda reservado.
 
 ## Convenciones
 

@@ -19,6 +19,7 @@ from app.modules.cases.schemas import (
     RubricaEntrada,
     RubricaSalida,
 )
+from app.modules.cases.schemas_composicion import ComposicionDocenteSalida, ComposicionEntrada
 from app.modules.cases.schemas_puzzles import (
     PuzzleDocenteSalida,
     PuzzleEntrada,
@@ -271,6 +272,48 @@ def eliminar_opcion(
     servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
 ) -> None:
     servicio.eliminar_opcion(caso_id, opcion_id, sesion)
+
+
+@router.get(
+    "/{caso_id}/escenarios/{escenario_id}/composicion",
+    response_model=ComposicionDocenteSalida | None,
+)
+def obtener_composicion(
+    caso_id: str,
+    escenario_id: str,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> ComposicionDocenteSalida | None:
+    """Composición del escenario para el editor visual; `null` si todavía no tiene."""
+    composicion = servicio.obtener_composicion(caso_id, escenario_id, sesion)
+    return None if composicion is None else ComposicionDocenteSalida.model_validate(composicion)
+
+
+@router.put(
+    "/{caso_id}/escenarios/{escenario_id}/composicion",
+    response_model=ComposicionDocenteSalida,
+)
+def guardar_composicion(
+    caso_id: str,
+    escenario_id: str,
+    solicitud: ComposicionEntrada,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> ComposicionDocenteSalida:
+    """Crea o reemplaza la composición (solo en borrador; una por escenario)."""
+    return ComposicionDocenteSalida.model_validate(
+        servicio.guardar_composicion(caso_id, escenario_id, sesion, solicitud),
+    )
+
+
+@router.delete("/{caso_id}/escenarios/{escenario_id}/composicion", status_code=204)
+def eliminar_composicion(
+    caso_id: str,
+    escenario_id: str,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> None:
+    servicio.eliminar_composicion(caso_id, escenario_id, sesion)
 
 
 @router.post(
