@@ -7,6 +7,7 @@ from app.modules.cases.models import (
     Escenario,
     Opcion,
     Pregunta,
+    Puzzle,
     Rubrica,
 )
 
@@ -16,6 +17,7 @@ def carga_caso_completa():
         selectinload(Caso.escenarios)
         .selectinload(Escenario.preguntas)
         .selectinload(Pregunta.opciones),
+        selectinload(Caso.escenarios).selectinload(Escenario.puzzles),
         selectinload(Caso.rubrica)
         .selectinload(Rubrica.criterios)
         .selectinload(CriterioRubrica.preguntas),
@@ -82,6 +84,9 @@ class RepositorioCasos:
 
     def opcion_por_id(self, opcion_id: str) -> Opcion | None:
         return self.db.get(Opcion, opcion_id)
+
+    def puzzle_por_id(self, puzzle_id: str) -> Puzzle | None:
+        return self.db.get(Puzzle, puzzle_id)
 
     def obtener_rubrica(self, caso_id: str) -> Rubrica | None:
         stmt = (

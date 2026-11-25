@@ -1564,6 +1564,423 @@ select option {
   }
 }
 
+/* ---------- editor de puzzles del docente ---------- */
+
+.bloque-puzzles {
+  margin: 0.9rem 0;
+  padding: 0.9rem;
+  border: 1px solid rgb(var(--neon-rgb) / 0.35);
+  border-radius: var(--radio-chico);
+  background: rgb(var(--neon-rgb) / 0.05);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fila-puzzle {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: rgb(var(--blanco-rgb) / 0.03);
+}
+
+.fila-puzzle-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.fila-puzzle-texto {
+  flex: 1 1 200px;
+}
+
+.lista-editable {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.9rem 0;
+}
+
+.lista-filas {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fila-editable {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.campo-radio {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.campo-radio input[type="radio"] {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  accent-color: var(--acento);
+}
+
+.puzle-previa {
+  display: grid;
+}
+
+/* ---------- puzzles y mapa de capítulos (Fase 13) ---------- */
+
+.temporizador-chico {
+  font-size: 1.2rem;
+  padding: 0.1rem 0.7rem;
+  flex: none;
+}
+
+.info-puzzles {
+  color: var(--neon);
+}
+
+.puzle {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.puzle-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.puzle-cabecera .enunciado {
+  margin: 0;
+  font-size: clamp(1.1rem, 4.2vw, 1.4rem);
+}
+
+.puzle-subtitulo {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--neon);
+}
+
+.puzle-navegacion {
+  margin-top: 0.4rem;
+}
+
+.puzle-volver {
+  justify-self: center;
+}
+
+.puzle-resultado {
+  text-align: center;
+  justify-items: center;
+}
+
+.puzle-acerto .emoji-grande {
+  filter: drop-shadow(0 0 22px rgb(var(--acento-rgb) / 0.7));
+}
+
+.puzle-tarjeta,
+.puzle-ficha,
+.puzle-chip,
+.puzle-pieza {
+  font: inherit;
+  color: var(--texto);
+  background: rgb(var(--neon-rgb) / 0.08);
+  border: 2px solid rgb(var(--neon-rgb) / 0.35);
+  border-radius: var(--radio-chico);
+  transition: border-color var(--rapido) ease, background var(--rapido) ease,
+    transform var(--rapido) ease, box-shadow var(--rapido) ease;
+}
+
+/* 1. ordenar */
+.puzle-ordenar {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+.puzle-ficha {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 56px;
+  padding: 0.4rem 0.6rem;
+}
+
+.puzle-ficha.arrastrando {
+  border-color: var(--acento);
+  background: rgb(var(--acento-rgb) / 0.16);
+  box-shadow: var(--sombra);
+  transform: scale(1.02);
+}
+
+.puzle-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--sobre-frio);
+  background: var(--degradado-frio);
+}
+
+.puzle-asa {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 44px;
+  font-size: 1.4rem;
+  color: var(--neon);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.puzle-texto {
+  flex: 1;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.puzle-flechas {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.puzle-flechas .boton-icono {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+/* 2. emparejar */
+.puzle-emparejar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.puzle-columna {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.puzle-tarjeta {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.puzle-tarjeta.elegido {
+  border-color: var(--neon);
+  box-shadow: 0 0 0 3px rgb(var(--neon-rgb) / 0.25);
+  transform: translateY(-2px);
+}
+
+.puzle-tarjeta.emparejado {
+  border-color: var(--acento);
+  background: rgb(var(--acento-rgb) / 0.12);
+}
+
+.puzle-insignia {
+  display: none;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--sobre-acento);
+  background: var(--degradado-calido);
+}
+
+.puzle-tarjeta.emparejado .puzle-insignia {
+  display: grid;
+}
+
+/* 3. la pieza que falta */
+.puzle-pieza-faltante {
+  display: grid;
+  gap: 1rem;
+}
+
+.puzle-serie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.puzle-pieza {
+  display: grid;
+  place-items: center;
+  min-width: 64px;
+  min-height: 56px;
+  padding: 0.3rem 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.puzle-hueco {
+  border-style: dashed;
+  border-color: var(--acento);
+  background: rgb(var(--acento-rgb) / 0.08);
+  color: var(--acento);
+}
+
+.puzle-hueco.llena {
+  border-style: solid;
+  background: rgb(var(--acento-rgb) / 0.18);
+  color: var(--texto);
+}
+
+.puzle-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.puzle-opciones .puzle-tarjeta {
+  width: auto;
+  justify-content: center;
+  text-align: center;
+}
+
+/* 4. clasificar */
+.puzle-clasificar {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.puzle-zonas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+}
+
+.puzle-zona,
+.puzle-reserva {
+  min-height: 90px;
+  padding: 0.6rem;
+  border: 2px dashed rgb(var(--neon-rgb) / 0.4);
+  border-radius: var(--radio);
+  background: rgb(var(--abismo-rgb) / 0.35);
+}
+
+.puzle-zona.destino,
+.puzle-reserva.destino {
+  border-color: var(--neon);
+  background: rgb(var(--neon-rgb) / 0.08);
+}
+
+.puzle-zona-items,
+.puzle-reserva {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-content: flex-start;
+}
+
+.puzle-chip {
+  min-height: 44px;
+  padding: 0.4rem 0.8rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.puzle-chip.elegido {
+  border-color: var(--acento);
+  background: rgb(var(--acento-rgb) / 0.18);
+  box-shadow: 0 0 0 3px rgb(var(--acento-rgb) / 0.25);
+}
+
+.puzle-chip.arrastrando {
+  opacity: 0.35;
+}
+
+.puzle-fantasma {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: var(--sombra);
+  border-color: var(--acento);
+}
+
+/* mapa de capítulos */
+.fila-capitulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fila-capitulo .kicker {
+  margin: 0;
+}
+
+.mapa {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.mapa-lista {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.capitulo-mapa {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.capitulo-mapa.siguiente {
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px rgb(var(--acento-rgb) / 0.2), var(--sombra-suave);
+}
+
+.capitulo-mapa.bloqueado {
+  opacity: 0.6;
+}
+
+@media (max-width: 420px) {
+  .puzle-emparejar {
+    gap: 0.5rem;
+  }
+
+  .puzle-ficha {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .puzle-num {
+    display: none;
+  }
+}
+
 /* ---------- verificación de registro por código ---------- */
 
 [hidden] {

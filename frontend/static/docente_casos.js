@@ -577,6 +577,124 @@ const EditorCasos = (() => {
       );
     }
 
+    /* ----- puzzles del escenario (Fase 13): opcionales, no puntúan ----- */
+
+    function idsDePuzzlesConCambio(escenario, puzzle, direccion) {
+      const lista = (escenario.puzzles || []).map((p) => p.id);
+      const origen = lista.indexOf(puzzle.id);
+      const destino = origen + direccion;
+      if (destino < 0 || destino >= lista.length) return null;
+      [lista[origen], lista[destino]] = [lista[destino], lista[origen]];
+      return caso.escenarios.flatMap((e) => (e.id === escenario.id ? lista : (e.puzzles || []).map((p) => p.id)));
+    }
+
+    function filaPuzzle(escenario, puzzle, i, total) {
+      return h(
+        "div",
+        { clase: "fila-puzzle" },
+        h(
+          "div",
+          { clase: "fila-puzzle-info" },
+          h("span", { clase: "chip chip-neutro" }, EditorPuzzles.nombreDe(puzzle.tipo)),
+          h("span", { clase: "fila-puzzle-texto" }, puzzle.enunciado),
+          h("small", { clase: "texto-suave" }, `⏱ ${puzzle.contenido.tiempo_seg} s`),
+        ),
+        h(
+          "div",
+          { clase: "fila-convocado-acciones" },
+          h("button", {
+            type: "button",
+            clase: "boton boton-info boton-chico",
+            texto: "👁 Vista previa",
+            onclick: () => EditorPuzzles.vistaPrevia(casoId, puzzle),
+          }),
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            "aria-label": "Subir puzzle",
+            texto: "▲",
+            disabled: i === 0,
+            onclick: () => moverPuzzle(escenario, puzzle, -1),
+          }),
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            "aria-label": "Bajar puzzle",
+            texto: "▼",
+            disabled: i === total - 1,
+            onclick: () => moverPuzzle(escenario, puzzle, 1),
+          }),
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            texto: "✏ Editar",
+            onclick: () =>
+              EditorPuzzles.formulario({
+                puzzle,
+                alGuardar: async (cuerpo) => {
+                  await Api.put(`/cases/${casoId}/puzzles/${puzzle.id}`, cuerpo);
+                  abiertos.add(escenario.id);
+                  await recargar();
+                  Aviso.exito("Puzzle guardado.");
+                },
+              }),
+          }),
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            "aria-label": "Eliminar puzzle",
+            texto: "🗑",
+            onclick: async () => {
+              const confirmado = await Modal.confirmar({
+                titulo: "¿Eliminar el puzzle?",
+                mensaje: "Se borrará de este escenario.",
+                textoConfirmar: "Eliminar",
+                peligro: true,
+              });
+              if (confirmado) await accion(() => Api.eliminar(`/cases/${casoId}/puzzles/${puzzle.id}`));
+            },
+          }),
+        ),
+      );
+    }
+
+    async function moverPuzzle(escenario, puzzle, direccion) {
+      const ids = idsDePuzzlesConCambio(escenario, puzzle, direccion);
+      if (!ids) return;
+      await accion(() => Api.put(`/cases/${casoId}/orden/puzzles`, { ids }));
+    }
+
+    function bloquePuzzles(escenario) {
+      const lista = escenario.puzzles || [];
+      return h(
+        "div",
+        { clase: "bloque-puzzles" },
+        h("h4", { clase: "puzle-subtitulo" }, `🧩 Puzzles antes de las preguntas (${lista.length} de 3)`),
+        h(
+          "p",
+          { clase: "ayuda" },
+          "Opcionales: el estudiante los juega antes de las preguntas de este escenario. No cuentan para la nota y puede saltarlos.",
+        ),
+        lista.map((puzzle, i) => filaPuzzle(escenario, puzzle, i, lista.length)),
+        h("button", {
+          type: "button",
+          clase: "boton boton-info boton-chico",
+          texto: "+ Agregar puzzle",
+          disabled: lista.length >= 3,
+          onclick: () =>
+            EditorPuzzles.formulario({
+              puzzle: null,
+              alGuardar: async (cuerpo) => {
+                await Api.post(`/cases/${casoId}/escenarios/${escenario.id}/puzzles`, cuerpo);
+                abiertos.add(escenario.id);
+                await recargar();
+                Aviso.exito("Puzzle agregado.");
+              },
+            }),
+        }),
+      );
+    }
+
     function bloqueEscenario(escenario, indice) {
       const titulo = campoTexto(escenario.titulo, { "aria-label": "Título del escenario" });
       const contexto = campoArea(escenario.contexto, 3, { "aria-label": "Contexto del escenario" });
@@ -607,6 +725,7 @@ const EditorCasos = (() => {
         h("label", { clase: "campo" }, h("span", {}, "Título"), titulo),
         h("label", { clase: "campo" }, h("span", {}, "Qué ocurre en este escenario"), contexto),
         escenario.preguntas.map((pregunta, j) => bloquePregunta(escenario, pregunta, j)),
+        bloquePuzzles(escenario),
         h(
           "div",
           { clase: "acciones" },
@@ -931,6 +1050,24 @@ const EditorCasos = (() => {
             { clase: "tarjeta espaciado" },
             h("h3", { clase: "titulo-tarjeta" }, `🎬 Escenario ${i + 1}: ${escenario.titulo}`),
             h("p", { clase: "texto-suave" }, escenario.contexto),
+            (escenario.puzzles || []).map((puzzle) =>
+              h(
+                "div",
+                { clase: "fila-puzzle" },
+                h(
+                  "div",
+                  { clase: "fila-puzzle-info" },
+                  h("span", { clase: "chip chip-neutro" }, EditorPuzzles.nombreDe(puzzle.tipo)),
+                  h("span", { clase: "fila-puzzle-texto" }, puzzle.enunciado),
+                ),
+                h("button", {
+                  type: "button",
+                  clase: "boton boton-info boton-chico",
+                  texto: "👁 Vista previa",
+                  onclick: () => EditorPuzzles.vistaPrevia(casoId, puzzle),
+                }),
+              ),
+            ),
             escenario.preguntas.map((pregunta, j) =>
               h(
                 "div",

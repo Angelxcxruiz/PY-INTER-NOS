@@ -14,6 +14,8 @@ ESTATICOS = [
     "registro.js",
     "docente.js",
     "docente_casos.js",
+    "docente_puzzles.js",
+    "puzzles.js",
     "docente_resultados.js",
     "simulador.js",
     "resultado.js",

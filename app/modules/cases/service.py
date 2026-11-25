@@ -1,5 +1,7 @@
+import copy
 from decimal import Decimal
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.core.clock import Reloj, ahora
@@ -15,7 +17,13 @@ from app.modules.cases.models import (
     Escenario,
     Opcion,
     Pregunta,
+    Puzzle,
     Rubrica,
+)
+from app.modules.cases.puzzles import (
+    MAX_PUZZLES_POR_ESCENARIO,
+    validar_contenido,
+    verificar,
 )
 from app.modules.cases.repository import RepositorioCasos
 from app.modules.cases.schemas import (
@@ -24,6 +32,7 @@ from app.modules.cases.schemas import (
     PreguntaDocenteEntrada,
     RubricaEntrada,
 )
+from app.modules.cases.schemas_puzzles import PuzzleEntrada
 from app.modules.cases.validacion import validar_caso_para_publicar
 
 
@@ -358,14 +367,123 @@ class ServicioCasos:
         caso.actualizado_en = self.momento()
         self.db.commit()
 
+    # --- puzzles (Fase 13): no puntúan; solo se editan mientras el caso es borrador -----------
+
+    def _puzzle_del_caso(self, caso: Caso, puzzle_id: str) -> Puzzle:
+        puzzle = self.repositorio.puzzle_por_id(puzzle_id)
+        if puzzle is None or puzzle.escenario.caso_id != caso.id:
+            raise ErrorNoEncontrado("Puzzle no encontrado")
+        return puzzle
+
+    def crear_puzzle(
+        self,
+        caso_id: str,
+        escenario_id: str,
+        sesion: dict,
+        solicitud: PuzzleEntrada,
+    ) -> Puzzle:
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        escenario = self.repositorio.escenario_por_id(escenario_id)
+        if escenario is None or escenario.caso_id != caso.id:
+            raise ErrorNoEncontrado("Escenario no encontrado")
+        contenido = validar_contenido(solicitud.tipo, solicitud.contenido)
+        if len(escenario.puzzles) >= MAX_PUZZLES_POR_ESCENARIO:
+            raise ErrorConflicto(
+                f"Un escenario admite como máximo {MAX_PUZZLES_POR_ESCENARIO} puzzles",
+            )
+        puzzle = Puzzle(
+            escenario_id=escenario.id,
+            orden=len(escenario.puzzles) + 1,
+            tipo=solicitud.tipo,
+            enunciado=solicitud.enunciado.strip(),
+            contenido=contenido,
+            creado_en=self.momento(),
+        )
+        self.repositorio.registrar(puzzle)
+        caso.actualizado_en = self.momento()
+        self.db.commit()
+        self.db.refresh(puzzle)
+        return puzzle
+
+    def editar_puzzle(
+        self,
+        caso_id: str,
+        puzzle_id: str,
+        sesion: dict,
+        solicitud: PuzzleEntrada,
+    ) -> Puzzle:
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        puzzle = self._puzzle_del_caso(caso, puzzle_id)
+        puzzle.tipo = solicitud.tipo
+        puzzle.enunciado = solicitud.enunciado.strip()
+        puzzle.contenido = validar_contenido(solicitud.tipo, solicitud.contenido)
+        caso.actualizado_en = self.momento()
+        self.db.commit()
+        self.db.refresh(puzzle)
+        return puzzle
+
+    def eliminar_puzzle(self, caso_id: str, puzzle_id: str, sesion: dict) -> None:
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        puzzle = self._puzzle_del_caso(caso, puzzle_id)
+        escenario = puzzle.escenario
+        self.db.delete(puzzle)
+        self.db.flush()
+        self._normalizar_orden(escenario.puzzles)
+        caso.actualizado_en = self.momento()
+        self.db.commit()
+
+    def vista_previa_puzzle(self, caso_id: str, puzzle_id: str, sesion: dict) -> Puzzle:
+        """El docente dueño juega su propio puzzle aunque el caso siga en borrador."""
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        return self._puzzle_del_caso(caso, puzzle_id)
+
+    def verificar_puzzle(self, puzzle_id: str, respuesta: dict, sesion: dict) -> bool:
+        """Solo dice si acertó. El estudiante únicamente puede verificar puzzles de su caso."""
+        puzzle = self.repositorio.puzzle_por_id(puzzle_id)
+        if puzzle is None:
+            raise ErrorNoEncontrado("Puzzle no encontrado")
+        caso_id = puzzle.escenario.caso_id
+        rol = sesion.get("rol")
+        if rol == "ESTUDIANTE":
+            if sesion.get("caso_id") != caso_id:
+                raise ErrorPermiso("Este puzzle no pertenece a tu caso")
+        elif rol == "DOCENTE":
+            self._verificar_acceso(self._obtener(caso_id), sesion)
+        elif rol != "ADMINISTRADOR":
+            raise ErrorPermiso("No tiene permisos para realizar esta accion")
+        return verificar(puzzle.tipo, puzzle.contenido, respuesta)
+
     def reordenar(self, caso_id: str, tipo: str, ids: list[str], sesion: dict) -> None:
         caso = self._obtener(caso_id)
         self._verificar_acceso(caso, sesion)
         self._verificar_borrador(caso)
-        if tipo not in {"escenarios", "preguntas", "opciones"}:
+        if tipo not in {"escenarios", "preguntas", "opciones", "puzzles"}:
             raise ErrorValidacion("Tipo de orden no permitido")
         if len(set(ids)) != len(ids):
             raise ErrorValidacion("La lista de ids no puede tener duplicados")
+
+        if tipo == "puzzles":
+            # El orden relativo de la lista se aplica dentro de cada escenario.
+            mapa = {
+                puzzle.id: puzzle for escenario in caso.escenarios for puzzle in escenario.puzzles
+            }
+            if set(mapa) != set(ids):
+                raise ErrorValidacion("La lista debe incluir todos los puzzles del caso")
+            contadores: dict[str, int] = {}
+            for puzzle_id in ids:
+                puzzle = mapa[puzzle_id]
+                contadores[puzzle.escenario_id] = contadores.get(puzzle.escenario_id, 0) + 1
+                puzzle.orden = contadores[puzzle.escenario_id]
+            caso.actualizado_en = self.momento()
+            self.db.commit()
+            return
 
         if tipo == "escenarios":
             mapa = {entidad.id: entidad for entidad in caso.escenarios}
@@ -498,6 +616,17 @@ class ServicioCasos:
                 contexto=escenario.contexto,
             )
             self.repositorio.registrar(escenario_nuevo)
+            for puzzle in escenario.puzzles:
+                self.repositorio.registrar(
+                    Puzzle(
+                        escenario=escenario_nuevo,
+                        orden=puzzle.orden,
+                        tipo=puzzle.tipo,
+                        enunciado=puzzle.enunciado,
+                        contenido=copy.deepcopy(puzzle.contenido),
+                        creado_en=momento,
+                    )
+                )
             for pregunta in escenario.preguntas:
                 pregunta_nueva = Pregunta(
                     escenario=escenario_nuevo,
@@ -546,5 +675,7 @@ class ServicioCasos:
         return self._obtener(copia.id)
 
     def _normalizar_orden(self, entidades) -> None:
-        for orden, entidad in enumerate(sorted(entidades, key=lambda item: item.orden), start=1):
+        # Tras `delete` + `flush` la colección todavía contiene la entidad borrada: se omite.
+        vivas = [entidad for entidad in entidades if not inspect(entidad).was_deleted]
+        for orden, entidad in enumerate(sorted(vivas, key=lambda item: item.orden), start=1):
             entidad.orden = orden

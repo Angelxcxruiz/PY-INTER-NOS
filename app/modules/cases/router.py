@@ -19,10 +19,18 @@ from app.modules.cases.schemas import (
     RubricaEntrada,
     RubricaSalida,
 )
+from app.modules.cases.schemas_puzzles import (
+    PuzzleDocenteSalida,
+    PuzzleEntrada,
+    PuzzleEstudianteSalida,
+    VerificarPuzzleEntrada,
+    VerificarPuzzleSalida,
+)
 from app.modules.cases.service import ServicioCasos
 from app.shared.dependencias_autenticacion import requerir_permiso
 
 router = APIRouter(prefix="/cases", tags=["M2 - Casos academicos"])
+router_puzzles = APIRouter(prefix="/puzzles", tags=["M2 - Puzzles"])
 permiso_crear_casos = requerir_permiso("CREAR_CASOS")
 
 
@@ -263,6 +271,72 @@ def eliminar_opcion(
     servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
 ) -> None:
     servicio.eliminar_opcion(caso_id, opcion_id, sesion)
+
+
+@router.post(
+    "/{caso_id}/escenarios/{escenario_id}/puzzles",
+    response_model=PuzzleDocenteSalida,
+    status_code=201,
+)
+def crear_puzzle(
+    caso_id: str,
+    escenario_id: str,
+    solicitud: PuzzleEntrada,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> PuzzleDocenteSalida:
+    return PuzzleDocenteSalida.model_validate(
+        servicio.crear_puzzle(caso_id, escenario_id, sesion, solicitud),
+    )
+
+
+@router.put("/{caso_id}/puzzles/{puzzle_id}", response_model=PuzzleDocenteSalida)
+def editar_puzzle(
+    caso_id: str,
+    puzzle_id: str,
+    solicitud: PuzzleEntrada,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> PuzzleDocenteSalida:
+    return PuzzleDocenteSalida.model_validate(
+        servicio.editar_puzzle(caso_id, puzzle_id, sesion, solicitud),
+    )
+
+
+@router.delete("/{caso_id}/puzzles/{puzzle_id}", status_code=204)
+def eliminar_puzzle(
+    caso_id: str,
+    puzzle_id: str,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> None:
+    servicio.eliminar_puzzle(caso_id, puzzle_id, sesion)
+
+
+@router.get("/{caso_id}/puzzles/{puzzle_id}/vista-previa", response_model=PuzzleEstudianteSalida)
+def vista_previa_puzzle(
+    caso_id: str,
+    puzzle_id: str,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> PuzzleEstudianteSalida:
+    """El puzzle tal como lo verá el estudiante (barajado y sin solución), para el editor."""
+    return PuzzleEstudianteSalida.model_validate(
+        servicio.vista_previa_puzzle(caso_id, puzzle_id, sesion),
+    )
+
+
+@router_puzzles.post("/{puzzle_id}/verificar", response_model=VerificarPuzzleSalida)
+def verificar_puzzle(
+    puzzle_id: str,
+    solicitud: VerificarPuzzleEntrada,
+    sesion: Annotated[dict, Depends(obtener_sesion_actual)],
+    servicio: Annotated[ServicioCasos, Depends(obtener_servicio_casos)],
+) -> VerificarPuzzleSalida:
+    """Responde solo acertó / no acertó: la solución nunca sale del servidor."""
+    return VerificarPuzzleSalida(
+        acerto=servicio.verificar_puzzle(puzzle_id, solicitud.respuesta, sesion),
+    )
 
 
 @router.put("/{caso_id}/orden/{tipo}")

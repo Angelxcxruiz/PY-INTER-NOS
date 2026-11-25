@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.mysql import CHAR, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -72,6 +81,32 @@ class Escenario(Base):
         cascade="all, delete-orphan",
         order_by="Pregunta.orden",
     )
+    puzzles: Mapped[list["Puzzle"]] = relationship(
+        back_populates="escenario",
+        cascade="all, delete-orphan",
+        order_by="Puzzle.orden",
+    )
+
+
+class Puzzle(Base):
+    """Puzzle lógico previo a las preguntas de un escenario. No puntúa."""
+
+    __tablename__ = "puzzle"
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=uuid_como_texto)
+    escenario_id: Mapped[str] = mapped_column(
+        CHAR(36),
+        ForeignKey("escenario.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    tipo: Mapped[str] = mapped_column(String(30), nullable=False)
+    enunciado: Mapped[str] = mapped_column(Text, nullable=False)
+    contenido: Mapped[dict] = mapped_column(JSON, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+    escenario: Mapped[Escenario] = relationship(back_populates="puzzles")
 
 
 class Pregunta(Base):

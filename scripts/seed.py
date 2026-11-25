@@ -18,7 +18,15 @@ from app.modules.cases.models import (
     Escenario,
     Opcion,
     Pregunta,
+    Puzzle,
     Rubrica,
+)
+from app.modules.cases.puzzles import (
+    CLASIFICAR,
+    EMPAREJAR_CONCEPTOS,
+    ORDENAR_SECUENCIA,
+    PIEZA_FALTANTE,
+    validar_contenido,
 )
 from app.modules.sessions.models import Convocatoria, EspacioAcademico, Sesion
 
@@ -277,6 +285,110 @@ def asegurar_caso(db, docente) -> tuple[Caso, bool]:
     return caso, True
 
 
+MARCA_EJEMPLO = "[EJEMPLO — validar con docente]"
+
+# Puzzles de ejemplo por orden de escenario: (tipo, enunciado, contenido). No puntúan.
+PUZZLES_EJEMPLO = {
+    1: [
+        (
+            ORDENAR_SECUENCIA,
+            "Ordena los pasos de los primeros auxilios psicológicos.",
+            {
+                "tiempo_seg": 45,
+                "pasos": [
+                    "Observar: valorar la seguridad y las necesidades de la persona",
+                    "Escuchar: acompañar sin juzgar ni presionar",
+                    "Calmar: ayudar a regular la crisis",
+                    "Conectar: orientar hacia apoyo y servicios",
+                ],
+            },
+        ),
+        (
+            EMPAREJAR_CONCEPTOS,
+            "Une cada norma con su tema.",
+            {
+                "tiempo_seg": 60,
+                "pares": [
+                    {
+                        "termino": "Ley 1257 de 2008",
+                        "definicion": "Prevención y sanción de violencias contra la mujer",
+                    },
+                    {"termino": "Ley 2126 de 2021", "definicion": "Comisarías de Familia"},
+                    {
+                        "termino": "Resolución 459 de 2012",
+                        "definicion": "Atención en salud a víctimas de violencia sexual",
+                    },
+                    {
+                        "termino": "Ley 1098 de 2006",
+                        "definicion": "Código de la Infancia y la Adolescencia",
+                    },
+                ],
+            },
+        ),
+    ],
+    2: [
+        (
+            CLASIFICAR,
+            "Clasifica cada acción según quién la lidera.",
+            {
+                "tiempo_seg": 60,
+                "categorias": ["Sector salud", "Comisaría de Familia"],
+                "elementos": [
+                    {"texto": "Primeros auxilios psicológicos", "categoria": "Sector salud"},
+                    {"texto": "Valoración clínica del riesgo", "categoria": "Sector salud"},
+                    {"texto": "Medidas de protección", "categoria": "Comisaría de Familia"},
+                    {
+                        "texto": "Restablecimiento de derechos",
+                        "categoria": "Comisaría de Familia",
+                    },
+                ],
+            },
+        ),
+        (
+            PIEZA_FALTANTE,
+            "Completa la ruta de atención: ¿qué paso falta?",
+            {
+                "tiempo_seg": 30,
+                "serie": [
+                    "Detectar",
+                    "Valorar el riesgo",
+                    "Proteger",
+                    "Remitir",
+                    "Hacer seguimiento",
+                ],
+                "faltante": 3,
+                "distractores": ["Archivar", "Esperar"],
+            },
+        ),
+    ],
+}
+
+
+def asegurar_puzzles(db, caso) -> int:
+    """Agrega los puzzles de ejemplo a los escenarios que aún no tienen ninguno."""
+    creados = 0
+    momento = ahora()
+    for escenario in caso.escenarios:
+        ejemplos = PUZZLES_EJEMPLO.get(escenario.orden, [])
+        if not ejemplos or escenario.puzzles:
+            continue
+        for orden, (tipo, enunciado, contenido) in enumerate(ejemplos, start=1):
+            db.add(
+                Puzzle(
+                    id=str(uuid.uuid4()),
+                    escenario_id=escenario.id,
+                    orden=orden,
+                    tipo=tipo,
+                    enunciado=f"{MARCA_EJEMPLO} {enunciado}",
+                    contenido=validar_contenido(tipo, contenido),
+                    creado_en=momento,
+                )
+            )
+            creados += 1
+    db.flush()
+    return creados
+
+
 def reset_demo(db) -> None:
     nombre = "Caso 1. Violencia familiar y tentativa de feminicidio"
     casos = list(db.scalars(select(Caso).where(Caso.nombre == nombre)).all())
@@ -380,7 +492,10 @@ def main() -> int:
 
         caso, creado_caso = asegurar_caso(db, docente1)
         casos_creados += int(creado_caso)
+        puzzles_creados = asegurar_puzzles(db, caso)
         db.commit()
+        if puzzles_creados:
+            print(f"Puzzles de ejemplo creados: {puzzles_creados}")
 
         codigos = []
         if args.con_sesion:

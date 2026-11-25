@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.cases.schemas_puzzles import PuzzleDocenteSalida, PuzzleEstudianteSalida
+
 
 class ErrorValidacionSalida(BaseModel):
     codigo: str
@@ -64,6 +66,7 @@ class EscenarioDocenteSalida(BaseModel):
     titulo: str
     contexto: str
     preguntas: list[PreguntaDocenteSalida]
+    puzzles: list[PuzzleDocenteSalida] = Field(default_factory=list)
 
 
 class EscenarioEstudianteSalida(BaseModel):
@@ -73,6 +76,7 @@ class EscenarioEstudianteSalida(BaseModel):
     titulo: str
     contexto: str
     preguntas: list[PreguntaEstudianteSalida]
+    puzzles: list[PuzzleEstudianteSalida] = Field(default_factory=list)
 
 
 class CriterioRubricaEntrada(BaseModel):

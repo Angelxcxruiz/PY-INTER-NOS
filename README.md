@@ -127,6 +127,9 @@ Para probarlo de punta a punta: `python scripts/seed.py`, entrar como docente, a
 convocar a un estudiante, iniciarla, copiar el código y entrar como estudiante en otra pestaña.
 Desde el celular, abre `http://<IP-de-tu-PC>:8000/app/` (misma red Wi-Fi).
 
+El caso semilla trae 4 puzzles de ejemplo (marcados «[EJEMPLO — validar con docente]»); el docente
+crea los suyos por escenario desde el editor del caso. Los puzzles no puntúan.
+
 ### Registro con código de verificación
 
 `/app/registro` crea la cuenta; luego pide el código de 6 dígitos enviado al correo. El docente
