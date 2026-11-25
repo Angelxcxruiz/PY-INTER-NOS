@@ -301,6 +301,31 @@ de carga (`.boton.cargando::after` y `.icono-carga`, girando sobre un disco oscu
 (`favicon.svg`, enlazado en `base.html`). Los SVG llevan sus colores incrustados porque no pueden
 leer variables CSS.
 
+## Fase 13 — Puzzles lógicos antes de cada escenario (ampliación)
+
+- **No puntúan.** No se tocó `CalculadoraRubrica` ni la rúbrica: la nota sale solo de la opción
+  elegida en cada pregunta. Hay una prueba que compara la nota con y sin puzzles resueltos.
+- **Cuatro tipos**: ordenar secuencia, emparejar conceptos, pieza que falta y clasificar. Cada uno
+  dura 30–60 s (45 por defecto), se puede saltar y fallar o saltar solo cambia el mensaje
+  («¡Mente ágil!» / «Sigamos, ya entrenaste»).
+- **Datos**: tabla `puzzle` (migración `0013_puzzles`, FK a `escenario` con `ON DELETE CASCADE`);
+  `contenido` es JSON validado con Pydantic según el tipo (`app/modules/cases/puzzles.py`). Máximo 3
+  por escenario. Se copian en `new-version` igual que escenarios y preguntas.
+- **La solución nunca sale del servidor**: la vista del estudiante se genera en cada petición con los
+  elementos barajados (nunca en el orden resuelto) y la verificación es
+  `POST /puzzles/{id}/verificar`, que devuelve solo `acerto`.
+- **RF-10 y RF-14**: los puzzles no bloquean avanzar, volver ni finalizar; el resultado de cada puzzle
+  se guarda solo en el navegador (`sessionStorage`) para no repetir los ya resueltos. No se muestra
+  justificación ni opción correcta antes de finalizar.
+- **Flujo del simulador**: portada → mapa de capítulos (un capítulo por escenario) → tarjeta narrativa
+  → puzzles → preguntas. 2–4 preguntas: flujo lineal; 5–8: mapa con capítulos que se desbloquean en
+  orden; 9 o más: mapa con barra de progreso por capítulo. Se puede volver a cualquier capítulo visto.
+- **Corrección asociada**: `_normalizar_orden` ignoraba que una entidad borrada seguía en la
+  colección tras el `flush`; ahora la omite (también afectaba a escenarios y preguntas).
+- **Decisión consciente**: `verificar` no tiene límite de intentos. Como los puzzles no puntúan, forzar
+  uno por fuerza bruta no da ninguna ventaja académica.
+- Los ejemplos del caso semilla están marcados «[EJEMPLO — validar con docente]».
+
 ## Limitaciones conocidas
 
 - La lista de convocados del docente no trae correo ni nombre (`ConvocatoriaSalida` solo expone

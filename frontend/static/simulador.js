@@ -6,6 +6,14 @@
  * (sin es_correcta ni justificación). La corrección aparece únicamente en /app/resultado.
  * El tiempo restante SIEMPRE viene del servidor (segundos_restantes); el cliente solo
  * lo cuenta hacia atrás entre una respuesta del servidor y la siguiente.
+ *
+ * Flujo (Fase 13): briefing → capítulos (uno por escenario). Al entrar a un capítulo:
+ * tarjeta narrativa → puzzles pendientes (opcionales, no puntúan) → preguntas.
+ *   - 4 preguntas o menos: flujo lineal.
+ *   - de 5 a 8: mapa de capítulos que se desbloquean en orden.
+ *   - 9 o más: mapa con progreso por capítulo.
+ * RF-10: se puede volver a cualquier pregunta ya vista y cambiar la respuesta hasta finalizar;
+ * ningún puzzle bloquea eso (se puede saltar o volver sin resolverlo) y los resueltos no se repiten.
  */
 
 (function () {
@@ -21,12 +29,18 @@
   const LETRAS = "ABCDEFGHIJ";
   const UMBRAL_ALERTA_SEG = 300;
   const RESINCRONIZAR_CADA_MS = 20000;
+  const MAX_PREGUNTAS_LINEAL = 4;
+  const MAX_PREGUNTAS_MAPA = 8;
 
   const estado = {
     caso: null,
-    preguntas: [], // lista plana: { escenario, pregunta, posicion }
+    capitulos: [], // { indice, escenario, puzzles, preguntaIdx: [índices en `preguntas`] }
+    preguntas: [], // lista plana: { escenario, capitulo, numeroEscenario, primeraDelEscenario, pregunta }
+    modo: "lineal", // "lineal" | "mapa" | "mapa-progreso"
     participacion: null,
     respuestas: new Map(), // pregunta_id -> opcion_id confirmada por el servidor
+    local: { puzzles: {}, alcanzado: 0 }, // puzzles ya jugados y capítulo más lejano alcanzado
+    puzle: null, // puzzle montado en pantalla (para detenerlo al cambiar de pantalla)
     indice: 0,
     guardando: false,
     finalizando: false,
@@ -99,22 +113,33 @@
   /* ---------- carga inicial ---------- */
 
   function ordenar(lista) {
-    return [...lista].sort((a, b) => a.orden - b.orden);
+    return [...(lista || [])].sort((a, b) => a.orden - b.orden);
   }
 
-  function aplanar(caso) {
-    const plana = [];
-    ordenar(caso.escenarios).forEach((escenario, indiceEscenario) => {
-      ordenar(escenario.preguntas).forEach((pregunta, indicePregunta) => {
-        plana.push({
-          escenario,
-          numeroEscenario: indiceEscenario + 1,
-          primeraDelEscenario: indicePregunta === 0,
+  function armarCapitulos(caso) {
+    estado.capitulos = ordenar(caso.escenarios).map((escenario, indice) => ({
+      indice,
+      escenario,
+      puzzles: ordenar(escenario.puzzles),
+      preguntaIdx: [],
+    }));
+    estado.preguntas = [];
+    estado.capitulos.forEach((capitulo) => {
+      ordenar(capitulo.escenario.preguntas).forEach((pregunta, i) => {
+        capitulo.preguntaIdx.push(estado.preguntas.length);
+        estado.preguntas.push({
+          escenario: capitulo.escenario,
+          capitulo: capitulo.indice,
+          numeroEscenario: capitulo.indice + 1,
+          primeraDelEscenario: i === 0,
           pregunta,
         });
       });
     });
-    return plana;
+    const total = estado.preguntas.length;
+    if (estado.capitulos.length < 2 || total <= MAX_PREGUNTAS_LINEAL) estado.modo = "lineal";
+    else if (total <= MAX_PREGUNTAS_MAPA) estado.modo = "mapa";
+    else estado.modo = "mapa-progreso";
   }
 
   async function intentar(promesa) {
@@ -139,7 +164,7 @@
       Dom.reemplazar(escena, h("div", { clase: "tarjeta centrado" }, h("p", {}, "No se pudo cargar el caso. Recarga la página para intentarlo de nuevo.")));
       return;
     }
-    estado.preguntas = aplanar(estado.caso);
+    armarCapitulos(estado.caso);
 
     const convocatoria = encodeURIComponent(claims.convocatoria_id);
     const [enCurso, resultadoPrevio] = await Promise.all([
@@ -147,6 +172,55 @@
       intentar(Api.get(`/convocatorias/${convocatoria}/result`)),
     ]);
     mostrarBriefing(enCurso, resultadoPrevio);
+  }
+
+  /* ---------- estado local de la interfaz (solo puzzles jugados y capítulo alcanzado) ---------- */
+
+  function claveLocal() {
+    return `inn_juego_${estado.participacion.id}`;
+  }
+
+  function cargarLocal() {
+    try {
+      const guardado = JSON.parse(sessionStorage.getItem(claveLocal()) || "{}");
+      estado.local = { puzzles: guardado.puzzles || {}, alcanzado: guardado.alcanzado || 0 };
+    } catch (_) {
+      estado.local = { puzzles: {}, alcanzado: 0 };
+    }
+    // Lo respondido manda: no se bloquea un capítulo donde ya hay respuestas.
+    estado.preguntas.forEach((paso) => {
+      if (estado.respuestas.has(paso.pregunta.id)) {
+        estado.local.alcanzado = Math.max(estado.local.alcanzado, paso.capitulo);
+      }
+    });
+  }
+
+  function guardarLocal() {
+    try {
+      sessionStorage.setItem(claveLocal(), JSON.stringify(estado.local));
+    } catch (_) {
+      // Sin almacenamiento: los puzzles podrían repetirse, nada más.
+    }
+  }
+
+  function marcarAlcanzado(indiceCapitulo) {
+    if (indiceCapitulo > estado.local.alcanzado) {
+      estado.local.alcanzado = indiceCapitulo;
+      guardarLocal();
+    }
+  }
+
+  const respondidasDe = (capitulo) =>
+    capitulo.preguntaIdx.filter((i) => estado.respuestas.has(estado.preguntas[i].pregunta.id)).length;
+
+  const primeraSinResponder = (capitulo) =>
+    capitulo.preguntaIdx.find((i) => !estado.respuestas.has(estado.preguntas[i].pregunta.id));
+
+  const desbloqueado = (capitulo) => capitulo.indice <= estado.local.alcanzado;
+
+  function limpiarPuzle() {
+    if (estado.puzle) estado.puzle.destruir();
+    estado.puzle = null;
   }
 
   /* ---------- briefing ---------- */
@@ -157,6 +231,7 @@
     const caso = estado.caso;
     const nombreEstudiante = (Api.usuario() || {}).nombre;
     const escenarios = caso.escenarios.length;
+    const hayPuzzles = estado.capitulos.some((capitulo) => capitulo.puzzles.length > 0);
 
     const boton = h("button", {
       type: "button",
@@ -192,6 +267,12 @@
           h("li", {}, h("strong", {}, String(escenarios)), h("span", {}, escenarios === 1 ? "escenario" : "escenarios")),
           h("li", {}, h("strong", {}, String(estado.preguntas.length)), h("span", {}, "preguntas")),
         ),
+        hayPuzzles &&
+          h(
+            "p",
+            { clase: "ayuda centrado info-puzzles" },
+            "🧩 Antes de cada capítulo puede haber puzles para entrenar la mente. Son opcionales y no cuentan para tu nota.",
+          ),
         enCurso &&
           h("p", { clase: "ayuda centrado" }, "Tienes una participación en curso. El tiempo sigue corriendo."),
         boton,
@@ -226,54 +307,213 @@
     estado.respuestas = new Map(
       participacion.respuestas_actuales.map((r) => [r.pregunta_id, r.opcion_id]),
     );
+    cargarLocal();
     barraBriefing.classList.add("oculto");
     hud.classList.remove("oculto");
     document.body.classList.add("jugando");
 
-    const primeraSinResponder = estado.preguntas.findIndex(
-      (p) => !estado.respuestas.has(p.pregunta.id),
-    );
-    estado.indice = primeraSinResponder === -1 ? estado.preguntas.length - 1 : primeraSinResponder;
-
     sincronizarProgreso(participacion.progreso);
     arrancarReloj();
-    // Al retomar a mitad de un capítulo no se repite la portada.
-    const mostrarPortada = estado.respuestas.size === 0 || estado.preguntas[estado.indice].primeraDelEscenario;
-    irA(estado.indice, { portada: mostrarPortada });
+
+    const sinResponder = estado.preguntas.findIndex((p) => !estado.respuestas.has(p.pregunta.id));
+    const indice = sinResponder === -1 ? estado.preguntas.length - 1 : sinResponder;
+    if (estado.respuestas.size === 0) {
+      entrarCapitulo(0);
+    } else if (estado.modo !== "lineal") {
+      mostrarMapa();
+    } else if (estado.preguntas[indice].primeraDelEscenario && sinResponder !== -1) {
+      entrarCapitulo(estado.preguntas[indice].capitulo);
+    } else {
+      irA(indice);
+    }
   }
 
-  function irA(indice, { portada = false } = {}) {
-    estado.indice = indice;
-    const paso = estado.preguntas[indice];
-    $("#hud-contador").textContent = `Pregunta ${indice + 1} de ${estado.preguntas.length}`;
+  function contador(texto) {
+    $("#hud-contador").textContent = texto;
     window.scrollTo({ top: 0 });
-    if (portada && paso.primeraDelEscenario) pintarCapitulo(paso);
-    else pintarPregunta(paso);
   }
 
-  function pintarCapitulo(paso) {
+  function irA(indice) {
+    limpiarPuzle();
+    estado.indice = indice;
+    contador(`Pregunta ${indice + 1} de ${estado.preguntas.length}`);
+    pintarPregunta(estado.preguntas[indice]);
+  }
+
+  /* Entrar a un capítulo: narrativa (si es la primera vez) → puzzles pendientes → preguntas. */
+  function entrarCapitulo(indiceCapitulo) {
+    const capitulo = estado.capitulos[indiceCapitulo];
+    marcarAlcanzado(indiceCapitulo);
+    const pendientes = capitulo.puzzles.filter((puzzle) => !estado.local.puzzles[puzzle.id]);
+
+    const irAPreguntas = () => {
+      const destino = primeraSinResponder(capitulo);
+      irA(destino === undefined ? capitulo.preguntaIdx[0] : destino);
+    };
+    const jugar = (k) => {
+      if (k >= pendientes.length) {
+        irAPreguntas();
+        return;
+      }
+      pintarPuzzle(capitulo, pendientes[k], k, pendientes.length, () => jugar(k + 1), () => volverDesde(capitulo));
+    };
+
+    if (respondidasDe(capitulo) === 0) pintarCapitulo(capitulo, () => jugar(0));
+    else jugar(0);
+  }
+
+  /* Volver sin resolver: al mapa, o a la última pregunta del capítulo anterior. */
+  function volverDesde(capitulo) {
+    if (estado.modo !== "lineal") {
+      mostrarMapa();
+      return;
+    }
+    const anterior = estado.capitulos[capitulo.indice - 1];
+    if (anterior) irA(anterior.preguntaIdx[anterior.preguntaIdx.length - 1]);
+  }
+
+  function pintarCapitulo(capitulo, continuar) {
+    limpiarPuzle();
+    contador(`Capítulo ${capitulo.indice + 1} de ${estado.capitulos.length}`);
+    const hayAtras = estado.modo !== "lineal" || capitulo.indice > 0;
     Dom.reemplazar(
       escena,
       h(
         "section",
         { clase: "capitulo aparece" },
-        h("p", { clase: "kicker" }, `Capítulo ${paso.numeroEscenario}`),
-        h("h2", { clase: "titulo-capitulo" }, paso.escenario.titulo),
-        h("div", { clase: "tarjeta elevada tarjeta-historia" }, h("p", { clase: "texto-historia" }, paso.escenario.contexto)),
+        h("p", { clase: "kicker" }, `Capítulo ${capitulo.indice + 1}`),
+        h("h2", { clase: "titulo-capitulo" }, capitulo.escenario.titulo),
+        h("div", { clase: "tarjeta elevada tarjeta-historia" }, h("p", { clase: "texto-historia" }, capitulo.escenario.contexto)),
+        capitulo.puzzles.length > 0 &&
+          h("p", { clase: "ayuda centrado info-puzzles" }, `🧩 Antes de las preguntas: ${capitulo.puzzles.length === 1 ? "1 puzle opcional" : `${capitulo.puzzles.length} puzles opcionales`}.`),
         h("button", {
           type: "button",
           clase: "boton boton-grande boton-principal",
           texto: "CONTINUAR →",
-          onclick: () => pintarPregunta(paso),
+          onclick: continuar,
+        }),
+        hayAtras &&
+          h("button", {
+            type: "button",
+            clase: "boton boton-fantasma boton-chico",
+            texto: estado.modo !== "lineal" ? "🗺 Mapa de capítulos" : "← Volver a la pregunta anterior",
+            onclick: () => volverDesde(capitulo),
+          }),
+      ),
+    );
+  }
+
+  function pintarPuzzle(capitulo, puzzle, k, total, continuar, volver) {
+    limpiarPuzle();
+    contador(total > 1 ? `🧩 Puzle ${k + 1} de ${total}` : "🧩 Puzle");
+    const hayAtras = estado.modo !== "lineal" || capitulo.indice > 0;
+    estado.puzle = Puzzles.montar(escena, puzzle, {
+      verificar: (respuesta) =>
+        Api.post(`/puzzles/${encodeURIComponent(puzzle.id)}/verificar`, { respuesta }),
+      alTerminar: (resultado) => {
+        estado.local.puzzles[puzzle.id] = resultado;
+        guardarLocal();
+        continuar();
+      },
+      alVolver: hayAtras ? volver : null,
+      textoVolver: estado.modo !== "lineal" ? "🗺 Volver al mapa" : "← Volver a la pregunta anterior",
+    });
+  }
+
+  /* ---------- mapa de capítulos ---------- */
+
+  function mostrarMapa() {
+    limpiarPuzle();
+    contador("🗺 Mapa de capítulos");
+    const conProgreso = estado.modo === "mapa-progreso";
+    const siguiente = estado.capitulos.find(
+      (capitulo) => desbloqueado(capitulo) && respondidasDe(capitulo) < capitulo.preguntaIdx.length,
+    );
+
+    const tarjetas = estado.capitulos.map((capitulo) => {
+      const total = capitulo.preguntaIdx.length;
+      const respondidas = respondidasDe(capitulo);
+      const abierto = desbloqueado(capitulo);
+      const completo = respondidas === total;
+      const etiqueta = !abierto
+        ? ["🔒 Bloqueado", "neutro"]
+        : completo
+          ? ["✓ Completo", "ok"]
+          : respondidas > 0
+            ? ["En curso", "aviso"]
+            : capitulo === siguiente
+              ? ["Siguiente", "aviso"]
+              : ["Disponible", "neutro"];
+      return h(
+        "article",
+        { clase: `tarjeta capitulo-mapa ${abierto ? "" : "bloqueado"} ${capitulo === siguiente ? "siguiente" : ""}` },
+        h(
+          "div",
+          { clase: "tarjeta-fila" },
+          h("h3", { clase: "titulo-tarjeta" }, `Capítulo ${capitulo.indice + 1} · ${capitulo.escenario.titulo}`),
+          h("span", { clase: `chip chip-${etiqueta[1]}` }, etiqueta[0]),
+        ),
+        h(
+          "p",
+          { clase: "texto-suave" },
+          `${respondidas} de ${total} ${total === 1 ? "pregunta respondida" : "preguntas respondidas"}` +
+            (capitulo.puzzles.length ? ` · 🧩 ${capitulo.puzzles.length}` : ""),
+        ),
+        conProgreso &&
+          h(
+            "div",
+            { clase: "progreso", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round((respondidas / total) * 100)) },
+            h("div", { clase: "progreso-relleno", style: `width:${Math.round((respondidas / total) * 100)}%` }),
+          ),
+        h("button", {
+          type: "button",
+          clase: `boton boton-bloque ${capitulo === siguiente ? "boton-principal" : "boton-fantasma"}`,
+          texto: !abierto ? "Completa el capítulo anterior" : completo ? "Repasar" : respondidas > 0 ? "Continuar" : "Entrar",
+          disabled: !abierto,
+          onclick: () => entrarCapitulo(capitulo.indice),
+        }),
+      );
+    });
+
+    Dom.reemplazar(
+      escena,
+      h(
+        "section",
+        { clase: "mapa aparece" },
+        h("p", { clase: "kicker" }, "Tu recorrido"),
+        h("h2", { clase: "titulo-capitulo" }, estado.caso.nombre),
+        h("p", { clase: "ayuda" }, "Los capítulos se abren en orden. Puedes volver a cualquiera para cambiar tus respuestas hasta finalizar."),
+        h("div", { clase: "mapa-lista" }, tarjetas),
+        h("button", {
+          type: "button",
+          clase: "boton boton-fantasma boton-bloque",
+          texto: "FINALIZAR CASO",
+          onclick: pedirFinalizar,
         }),
       ),
     );
+  }
+
+  /* ---------- preguntas ---------- */
+
+  function avanzar(indice) {
+    const actual = estado.preguntas[indice];
+    const siguiente = estado.preguntas[indice + 1];
+    if (siguiente.capitulo === actual.capitulo) {
+      irA(indice + 1);
+      return;
+    }
+    marcarAlcanzado(siguiente.capitulo);
+    if (estado.modo === "lineal") entrarCapitulo(siguiente.capitulo);
+    else mostrarMapa();
   }
 
   function pintarPregunta(paso) {
     const { pregunta, escenario } = paso;
     const indice = estado.indice;
     const ultima = indice === estado.preguntas.length - 1;
+    const enMapa = estado.modo !== "lineal";
+    const finDeCapitulo = !ultima && estado.preguntas[indice + 1].capitulo !== paso.capitulo;
     const elegida = estado.respuestas.get(pregunta.id);
     const confirmacion = h("p", { clase: "confirmacion", "aria-live": "polite" });
 
@@ -302,16 +542,38 @@
       disabled: indice === 0,
       onclick: () => irA(indice - 1),
     });
+    const alMapa = h("button", {
+      type: "button",
+      clase: "boton boton-fantasma",
+      texto: "🗺 Mapa",
+      onclick: mostrarMapa,
+    });
     const siguiente = ultima
       ? h("button", { type: "button", clase: "boton boton-principal boton-finalizar", texto: "FINALIZAR", onclick: pedirFinalizar })
-      : h("button", { type: "button", clase: "boton boton-principal", texto: "Siguiente →", onclick: () => irA(indice + 1, { portada: true }) });
+      : h("button", {
+          type: "button",
+          clase: "boton boton-principal",
+          texto: enMapa && finDeCapitulo ? "Terminar capítulo →" : "Siguiente →",
+          onclick: () => avanzar(indice),
+        });
 
     Dom.reemplazar(
       escena,
       h(
         "section",
         { clase: "pregunta aparece" },
-        h("p", { clase: "kicker" }, `Capítulo ${paso.numeroEscenario} · ${escenario.titulo}`),
+        h(
+          "div",
+          { clase: "fila-capitulo" },
+          h("p", { clase: "kicker" }, `Capítulo ${paso.numeroEscenario} · ${escenario.titulo}`),
+          enMapa &&
+            h("button", {
+              type: "button",
+              clase: "boton boton-fantasma boton-chico",
+              texto: "🗺 Mapa",
+              onclick: mostrarMapa,
+            }),
+        ),
         h(
           "details",
           { clase: "detalles detalles-contexto" },
@@ -321,7 +583,7 @@
         h("h2", { clase: "enunciado" }, pregunta.enunciado),
         h("div", { clase: "opciones", role: "group", "aria-label": "Opciones de respuesta" }, botonesOpcion),
         confirmacion,
-        h("div", { clase: "navegacion" }, anterior, siguiente),
+        h("div", { clase: "navegacion" }, enMapa && paso.primeraDelEscenario ? alMapa : anterior, siguiente),
       ),
     );
   }
@@ -449,6 +711,7 @@
   async function tiempoAgotado() {
     if (estado.finalizando) return;
     estado.finalizando = true;
+    limpiarPuzle();
     clearInterval(estado.reloj.intervalo);
     Dom.reemplazar(
       escena,
@@ -504,6 +767,7 @@
 
   function irAResultado() {
     estado.finalizando = true;
+    limpiarPuzle();
     clearInterval(estado.reloj.intervalo);
     window.location.href = `/app/resultado?participacion=${encodeURIComponent(estado.participacion.id)}`;
   }

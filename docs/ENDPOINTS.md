@@ -122,6 +122,20 @@ Todos publicos (sin token). El codigo de 6 digitos llega por correo y nunca se d
 - `GET /api/v1/cases/{caso_id}/rubrica`
 - `PUT /api/v1/cases/{caso_id}/rubrica`
 
+Puzzles lógicos (Fase 13; no puntúan; 0 a 3 por escenario; `tipo` en `ORDENAR_SECUENCIA`,
+`EMPAREJAR_CONCEPTOS`, `PIEZA_FALTANTE`, `CLASIFICAR`, con `contenido` validado por tipo):
+
+- `POST /api/v1/cases/{caso_id}/escenarios/{escenario_id}/puzzles` (DOCENTE, 201)
+- `PUT /api/v1/cases/{caso_id}/puzzles/{puzzle_id}` (DOCENTE)
+- `DELETE /api/v1/cases/{caso_id}/puzzles/{puzzle_id}` (DOCENTE, 204)
+- `GET /api/v1/cases/{caso_id}/puzzles/{puzzle_id}/vista-previa` (DOCENTE: lo ve como el estudiante)
+- `PUT /api/v1/cases/{caso_id}/orden/puzzles` (DOCENTE: orden relativo dentro de cada escenario)
+- `POST /api/v1/puzzles/{puzzle_id}/verificar` (ESTUDIANTE del caso, DOCENTE dueño o ADMIN).
+  Recibe `{"respuesta": ...}` y devuelve solo `{"acerto": true|false}`, sin revelar la solución.
+
+`GET /cases/{caso_id}/vista-estudiante` incluye los puzzles con los elementos barajados y **sin
+solución**.
+
 Ejemplo minimo para crear una opcion:
 
 ```json
