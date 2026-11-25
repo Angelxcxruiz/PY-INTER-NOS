@@ -130,6 +130,11 @@ Desde el celular, abre `http://<IP-de-tu-PC>:8000/app/` (misma red Wi-Fi).
 El caso semilla trae 4 puzzles de ejemplo (marcados «[EJEMPLO — validar con docente]»); el docente
 crea los suyos por escenario desde el editor del caso. Los puzzles no puntúan.
 
+El docente también puede armar la imagen de cada escenario con el **editor visual de escenarios**
+(botón «🎨 Crear composición» dentro del escenario, en un caso en borrador; pensado para computador).
+Las imágenes que sube (JPG o PNG, máx. 5 MB) quedan en `uploads/` (ignorada por git) y se sirven en
+`/media`; la carpeta se cambia con `ALMACENAMIENTO_DIR`.
+
 ### Registro con código de verificación
 
 `/app/registro` crea la cuenta; luego pide el código de 6 dígitos enviado al correo. El docente

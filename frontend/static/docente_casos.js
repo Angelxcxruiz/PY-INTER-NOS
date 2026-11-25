@@ -695,6 +695,33 @@ const EditorCasos = (() => {
       );
     }
 
+    function bloqueComposicion(escenario) {
+      const composicion = escenario.composicion;
+      return h(
+        "div",
+        { clase: "bloque-composicion" },
+        h("h4", { clase: "puzle-subtitulo" }, "🎨 Imagen del escenario"),
+        h(
+          "p",
+          { clase: "ayuda" },
+          composicion
+            ? `Composición con ${composicion.capas.length} capa(s). El estudiante la ve de fondo mientras responde las preguntas.`
+            : "Opcional: arma la imagen del escenario con el editor visual. Sin ella, el estudiante ve solo el texto del contexto.",
+        ),
+        h("button", {
+          type: "button",
+          clase: "boton boton-info boton-chico",
+          texto: composicion ? "🎨 Editar composición" : "🎨 Crear composición",
+          onclick: () =>
+            EditorVisual.abrir({
+              casoId,
+              escenario,
+              alGuardar: () => recargar(),
+            }),
+        }),
+      );
+    }
+
     function bloqueEscenario(escenario, indice) {
       const titulo = campoTexto(escenario.titulo, { "aria-label": "Título del escenario" });
       const contexto = campoArea(escenario.contexto, 3, { "aria-label": "Contexto del escenario" });
@@ -724,6 +751,7 @@ const EditorCasos = (() => {
         ),
         h("label", { clase: "campo" }, h("span", {}, "Título"), titulo),
         h("label", { clase: "campo" }, h("span", {}, "Qué ocurre en este escenario"), contexto),
+        bloqueComposicion(escenario),
         escenario.preguntas.map((pregunta, j) => bloquePregunta(escenario, pregunta, j)),
         bloquePuzzles(escenario),
         h(
@@ -1050,6 +1078,13 @@ const EditorCasos = (() => {
             { clase: "tarjeta espaciado" },
             h("h3", { clase: "titulo-tarjeta" }, `🎬 Escenario ${i + 1}: ${escenario.titulo}`),
             h("p", { clase: "texto-suave" }, escenario.contexto),
+            escenario.composicion &&
+              h("button", {
+                type: "button",
+                clase: "boton boton-info boton-chico",
+                texto: "🎨 Ver composición del escenario",
+                onclick: () => EditorVisual.abrir({ casoId, escenario, soloLectura: true }),
+              }),
             (escenario.puzzles || []).map((puzzle) =>
               h(
                 "div",

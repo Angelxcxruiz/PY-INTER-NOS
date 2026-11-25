@@ -3,6 +3,10 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.cases.schemas_composicion import (
+    ComposicionDocenteSalida,
+    ComposicionEstudianteSalida,
+)
 from app.modules.cases.schemas_puzzles import PuzzleDocenteSalida, PuzzleEstudianteSalida
 
 
@@ -67,6 +71,7 @@ class EscenarioDocenteSalida(BaseModel):
     contexto: str
     preguntas: list[PreguntaDocenteSalida]
     puzzles: list[PuzzleDocenteSalida] = Field(default_factory=list)
+    composicion: ComposicionDocenteSalida | None = None
 
 
 class EscenarioEstudianteSalida(BaseModel):
@@ -77,6 +82,8 @@ class EscenarioEstudianteSalida(BaseModel):
     contexto: str
     preguntas: list[PreguntaEstudianteSalida]
     puzzles: list[PuzzleEstudianteSalida] = Field(default_factory=list)
+    # None si el docente no armó una composición: el simulador usa solo el contexto de texto.
+    composicion: ComposicionEstudianteSalida | None = None
 
 
 class CriterioRubricaEntrada(BaseModel):

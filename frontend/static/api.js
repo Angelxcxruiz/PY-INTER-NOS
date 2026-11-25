@@ -99,7 +99,7 @@ const Api = {
     return claims;
   },
 
-  async solicitar(metodo, ruta, { cuerpo, consulta, credenciales = false } = {}) {
+  async solicitar(metodo, ruta, { cuerpo, consulta, credenciales = false, formulario } = {}) {
     let url = BASE_API + ruta;
     if (consulta) {
       const parametros = new URLSearchParams();
@@ -120,7 +120,7 @@ const Api = {
       respuesta = await fetch(url, {
         method: metodo,
         headers: cabeceras,
-        body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
+        body: formulario !== undefined ? formulario : cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
       });
     } catch (_) {
       throw new ErrorApi(
@@ -159,6 +159,13 @@ const Api = {
   post: (ruta, cuerpo, opciones = {}) => Api.solicitar("POST", ruta, { cuerpo, ...opciones }),
   put: (ruta, cuerpo) => Api.solicitar("PUT", ruta, { cuerpo }),
   eliminar: (ruta) => Api.solicitar("DELETE", ruta),
+
+  /* Sube un archivo como multipart/form-data (campo "archivo"). */
+  subirArchivo(ruta, archivo) {
+    const formulario = new FormData();
+    formulario.append("archivo", archivo);
+    return Api.solicitar("POST", ruta, { formulario });
+  },
 
   /* Primera línea de un error de validación (422) legible para humanos. */
   mensajeDe(error) {

@@ -1,8 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import Text, cast, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.cases.models import (
     Caso,
+    ComposicionEscenario,
     CriterioRubrica,
     Escenario,
     Opcion,
@@ -18,6 +19,7 @@ def carga_caso_completa():
         .selectinload(Escenario.preguntas)
         .selectinload(Pregunta.opciones),
         selectinload(Caso.escenarios).selectinload(Escenario.puzzles),
+        selectinload(Caso.escenarios).selectinload(Escenario.composicion),
         selectinload(Caso.rubrica)
         .selectinload(Rubrica.criterios)
         .selectinload(CriterioRubrica.preguntas),
@@ -87,6 +89,15 @@ class RepositorioCasos:
 
     def puzzle_por_id(self, puzzle_id: str) -> Puzzle | None:
         return self.db.get(Puzzle, puzzle_id)
+
+    def archivo_en_uso(self, archivo_id: str) -> bool:
+        """¿Alguna composición tiene una capa de imagen que apunta a este archivo?"""
+        stmt = (
+            select(ComposicionEscenario.id)
+            .where(cast(ComposicionEscenario.capas, Text).contains(archivo_id))
+            .limit(1)
+        )
+        return self.db.scalar(stmt) is not None
 
     def obtener_rubrica(self, caso_id: str) -> Rubrica | None:
         stmt = (

@@ -13,3 +13,6 @@ htmlcov/
 *.sqlite3
 *.db
 *.log
+
+# imágenes subidas por los docentes (editor visual de escenarios): no van al repositorio
+uploads/

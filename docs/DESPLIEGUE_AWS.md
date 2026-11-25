@@ -38,6 +38,14 @@ Alternativa sin administración de servidores:
 ## Correo
 
 Amazon SES requiere dominio o remitente verificado y `EMAIL_BACKEND=smtp`.
+
+## Imágenes del editor visual de escenarios
+
+Con `ALMACENAMIENTO_BACKEND=local` las imágenes se guardan en `ALMACENAMIENTO_DIR` (`/app/uploads` en el
+contenedor) y se sirven en `/media`. En Docker Compose es el volumen `uploads`: sin un volumen persistente
+se pierden al recrear el contenedor, y con varias réplicas cada una vería solo las suyas. Para producción
+con ECS Fargate o más de una instancia hay que implementar `AlmacenamientoS3` (hoy lanza
+`NotImplementedError` a propósito) y reescribir la `url` de las capas de imagen guardadas.
 Configurar credenciales SMTP mediante Secrets Manager o SSM Parameter Store.
 
 ## Secretos

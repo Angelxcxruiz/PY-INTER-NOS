@@ -1,4 +1,5 @@
 import os
+import tempfile
 from collections.abc import Generator
 
 import pytest
@@ -13,6 +14,9 @@ if _test_database_url:
     os.environ["DATABASE_URL"] = _test_database_url
 # Las pruebas procesan el outbox ellas mismas (con FakeAdapter): sin despacho en segundo plano.
 os.environ["DESPACHO_INMEDIATO"] = "false"
+# Las imágenes que suben las pruebas van a una carpeta temporal, nunca a uploads/.
+os.environ["ALMACENAMIENTO_DIR"] = tempfile.mkdtemp(prefix="inter_nos_uploads_")
+os.environ["ALMACENAMIENTO_BACKEND"] = "local"
 
 from app.core.config import obtener_configuracion
 from app.core.database import SessionLocal

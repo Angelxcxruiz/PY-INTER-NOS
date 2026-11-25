@@ -86,6 +86,33 @@ class Escenario(Base):
         cascade="all, delete-orphan",
         order_by="Puzzle.orden",
     )
+    composicion: Mapped["ComposicionEscenario | None"] = relationship(
+        back_populates="escenario",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class ComposicionEscenario(Base):
+    """Composición visual del escenario (editor visual): capas guardadas como JSON editable."""
+
+    __tablename__ = "composicion_escenario"
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=uuid_como_texto)
+    escenario_id: Mapped[str] = mapped_column(
+        CHAR(36),
+        ForeignKey("escenario.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    ancho: Mapped[int] = mapped_column(Integer, nullable=False)
+    alto: Mapped[int] = mapped_column(Integer, nullable=False)
+    fondo_color: Mapped[str] = mapped_column(String(7), nullable=False)
+    capas: Mapped[list] = mapped_column(JSON, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+    actualizado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+    escenario: Mapped[Escenario] = relationship(back_populates="composicion")
 
 
 class Puzzle(Base):

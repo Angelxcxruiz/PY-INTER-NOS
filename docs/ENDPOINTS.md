@@ -136,6 +136,40 @@ Puzzles lógicos (Fase 13; no puntúan; 0 a 3 por escenario; `tipo` en `ORDENAR_
 `GET /cases/{caso_id}/vista-estudiante` incluye los puzzles con los elementos barajados y **sin
 solución**.
 
+Composición del escenario (Fase 14, editor visual de escenarios; una por escenario, solo en borrador):
+
+- `GET /api/v1/cases/{caso_id}/escenarios/{escenario_id}/composicion` (DOCENTE dueño; `null` si no hay)
+- `PUT /api/v1/cases/{caso_id}/escenarios/{escenario_id}/composicion` (crea o reemplaza; 409 si el caso no es borrador)
+- `DELETE /api/v1/cases/{caso_id}/escenarios/{escenario_id}/composicion` (204)
+
+Cuerpo del `PUT`: `ancho`, `alto`, `fondo_color` (`#RRGGBB`) y `capas`. Cada capa lleva `tipo`
+(`imagen`, `texto`, `forma` o `icono`), `id`, `orden`, `x`, `y`, `ancho` y `alto` opcionales, y sus
+campos propios:
+
+```json
+{
+  "ancho": 1280, "alto": 720, "fondo_color": "#0b0c2b",
+  "capas": [
+    {"tipo": "imagen", "id": "fondo", "orden": 1, "archivo_id": "<uuid de /archivos>", "ajuste": "cubrir", "x": 0, "y": 0, "ancho": 1280, "alto": 720},
+    {"tipo": "texto", "id": "t1", "orden": 2, "x": 80, "y": 60, "ancho": 600, "contenido": "El pasillo", "tamano": 56, "color": "#ffffff", "alineacion": "centro", "negrita": true, "cursiva": false},
+    {"tipo": "forma", "id": "f1", "orden": 3, "forma": "rectangulo_redondeado", "relleno": "#14b8a6", "borde_color": null, "borde_grosor": 0, "opacidad": 0.6, "x": 60, "y": 400, "ancho": 360, "alto": 200},
+    {"tipo": "icono", "id": "i1", "orden": 4, "icono": "ojo", "color": "#fbbf24", "x": 900, "y": 80, "ancho": 96}
+  ]
+}
+```
+
+La `url` de las capas de imagen la pone el servidor. `GET /cases/{caso_id}/vista-estudiante` y los
+escenarios del docente traen `composicion` (o `null`) dentro de cada escenario.
+
+Archivos del editor visual (módulo `files`; requieren el permiso `CREAR_CASOS`):
+
+- `POST /api/v1/archivos/escenarios` (multipart, campo `archivo`; JPG o PNG, máximo 5 MB → 201; 413 si pesa
+  más, 415 si no es JPG/PNG de verdad, 422 si está vacío)
+- `GET /api/v1/archivos` (las imágenes del docente que la llama)
+- `DELETE /api/v1/archivos/{archivo_id}` (204; 403 si no es suyo; 409 si algún escenario la usa)
+
+Los archivos se leen en `GET /media/escenarios/<uuid>.<png|jpg>` (fuera de `/api/v1`).
+
 Ejemplo minimo para crear una opcion:
 
 ```json
@@ -213,3 +247,4 @@ Ejemplo de respuesta:
 - `GET /` redirige a `/app/`.
 - `GET /app/` (ingreso), `/app/registro`, `/app/docente`, `/app/simulador` y `/app/resultado`: páginas HTML.
 - `GET /app/static/*`: CSS y JS de la interfaz.
+- `GET /media/*`: imágenes subidas por los docentes para el editor visual de escenarios.

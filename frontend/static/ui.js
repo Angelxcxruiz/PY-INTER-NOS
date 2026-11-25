@@ -29,7 +29,7 @@ const Dom = {
   },
 
   reemplazar(contenedor, ...nodos) {
-    contenedor.replaceChildren(...nodos.flat().filter(Boolean));
+    contenedor.replaceChildren(...nodos.flat(Infinity).filter(Boolean));
   },
 };
 

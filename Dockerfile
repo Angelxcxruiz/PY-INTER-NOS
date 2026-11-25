@@ -21,6 +21,8 @@ COPY frontend ./frontend
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY scripts ./scripts
+# Carpeta de imágenes subidas por los docentes: escribible por el usuario no root.
+RUN mkdir -p /app/uploads && chown appuser /app/uploads
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

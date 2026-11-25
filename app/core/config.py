@@ -110,6 +110,10 @@ class Configuracion(BaseSettings):
     codigo_registro_cooldown_seg: int = Field(
         default=60, ge=0, validation_alias="CODIGO_REGISTRO_COOLDOWN_SEG"
     )
+    # Archivos subidos por el docente (editor visual de escenarios, Fase 14). Solo se pide el
+    # puerto PuertoAlmacenamiento; "local" escribe en disco y "s3" está reservado (sin implementar).
+    almacenamiento_backend: str = Field(default="local", validation_alias="ALMACENAMIENTO_BACKEND")
+    almacenamiento_dir: str = Field(default="uploads", validation_alias="ALMACENAMIENTO_DIR")
     # Tras responder al registro, intenta enviar el correo en el mismo proceso de la API, sin
     # esperar al worker. El outbox sigue siendo la fuente de verdad (el worker reintenta).
     despacho_inmediato: bool = Field(default=True, validation_alias="DESPACHO_INMEDIATO")
