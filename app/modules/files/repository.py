@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.files.models import ArchivoAdjunto
@@ -37,3 +39,17 @@ class RepositorioArchivos:
     def eliminar(self, archivo: ArchivoAdjunto) -> None:
         self.db.delete(archivo)
         self.db.flush()
+
+    def contar_generadas(self, docente_id: str, desde: datetime, hasta: datetime) -> int:
+        """Imágenes generadas con IA por el docente en [desde, hasta)."""
+        stmt = (
+            select(func.count())
+            .select_from(ArchivoAdjunto)
+            .where(
+                ArchivoAdjunto.docente_id == docente_id,
+                ArchivoAdjunto.origen == "GENERADO_IA",
+                ArchivoAdjunto.creado_en >= desde,
+                ArchivoAdjunto.creado_en < hasta,
+            )
+        )
+        return int(self.db.scalar(stmt) or 0)

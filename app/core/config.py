@@ -2,7 +2,7 @@ import hashlib
 from functools import lru_cache
 
 from cryptography.fernet import Fernet
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Valor que trae .env.example en los secretos: los scripts de seed se niegan a usarlo.
@@ -114,6 +114,19 @@ class Configuracion(BaseSettings):
     # puerto PuertoAlmacenamiento; "local" escribe en disco y "s3" está reservado (sin implementar).
     almacenamiento_backend: str = Field(default="local", validation_alias="ALMACENAMIENTO_BACKEND")
     almacenamiento_dir: str = Field(default="uploads", validation_alias="ALMACENAMIENTO_DIR")
+    # Generación de imágenes con IA (Fase 15). Función opcional: la API arranca sin la clave y el
+    # endpoint responde 503 si falta. SecretStr evita que la clave salga en repr, logs o errores.
+    gemini_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="GEMINI_API_KEY")
+    gemini_modelo_imagen: str = Field(
+        default="gemini-nano-banana-2.1", validation_alias="GEMINI_MODELO_IMAGEN"
+    )
+    gemini_timeout_seg: float = Field(default=60, gt=0, validation_alias="GEMINI_TIMEOUT_SEG")
+    generacion_imagenes_activa: bool = Field(
+        default=True, validation_alias="GENERACION_IMAGENES_ACTIVA"
+    )
+    generacion_max_por_hora: int = Field(
+        default=10, ge=1, validation_alias="GENERACION_MAX_POR_HORA"
+    )
     # Tras responder al registro, intenta enviar el correo en el mismo proceso de la API, sin
     # esperar al worker. El outbox sigue siendo la fuente de verdad (el worker reintenta).
     despacho_inmediato: bool = Field(default=True, validation_alias="DESPACHO_INMEDIATO")

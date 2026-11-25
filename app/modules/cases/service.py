@@ -539,6 +539,13 @@ class ServicioCasos:
     def archivo_en_uso(self, archivo_id: str) -> bool:
         return self.repositorio.archivo_en_uso(archivo_id)
 
+    def autorizar_edicion_escenario(self, caso_id: str, escenario_id: str, sesion: dict) -> None:
+        """El docente es dueño del caso, el caso es borrador y el escenario es de ese caso."""
+        caso = self._obtener(caso_id)
+        self._verificar_acceso(caso, sesion)
+        self._verificar_borrador(caso)
+        self._escenario_del_caso(caso, escenario_id)
+
     def reordenar(self, caso_id: str, tipo: str, ids: list[str], sesion: dict) -> None:
         caso = self._obtener(caso_id)
         self._verificar_acceso(caso, sesion)

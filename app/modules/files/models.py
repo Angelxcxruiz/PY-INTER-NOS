@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.mysql import CHAR, DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,4 +28,8 @@ class ArchivoAdjunto(Base):
     tipo_mime: Mapped[str] = mapped_column(String(50), nullable=False)
     tamano_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     ruta_almacenamiento: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    origen: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="SUBIDO", server_default="SUBIDO"
+    )
+    prompt_generacion: Mapped[str | None] = mapped_column(Text, nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)

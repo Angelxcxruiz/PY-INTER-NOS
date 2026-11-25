@@ -46,6 +46,14 @@ contenedor) y se sirven en `/media`. En Docker Compose es el volumen `uploads`: 
 se pierden al recrear el contenedor, y con varias réplicas cada una vería solo las suyas. Para producción
 con ECS Fargate o más de una instancia hay que implementar `AlmacenamientoS3` (hoy lanza
 `NotImplementedError` a propósito) y reescribir la `url` de las capas de imagen guardadas.
+
+## Generación de imágenes con IA
+
+`GEMINI_API_KEY` es un secreto: en AWS va en Secrets Manager o en Parameter Store (SecureString), no en
+el repositorio ni en la imagen Docker. La función es opcional: sin clave la API arranca igual y el botón
+responde 503. El servidor necesita salida HTTPS a `generativelanguage.googleapis.com`. El gasto se acota con
+`GENERACION_MAX_POR_HORA` (por docente). El candado de «una generación a la vez» y el tope viven en el
+proceso/base: con varias réplicas, el candado es por réplica (el tope sí es global porque se cuenta en la base).
 Configurar credenciales SMTP mediante Secrets Manager o SSM Parameter Store.
 
 ## Secretos

@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from ayudas_editor import _cabeceras
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select, text
 
@@ -16,16 +17,12 @@ from app.core.almacenamiento import (
     directorio_media,
     obtener_almacenamiento,
 )
-from app.core.clock import ahora
 from app.core.config import obtener_configuracion
 from app.core.database import SessionLocal
 from app.core.exceptions import ErrorTipoArchivo
-from app.core.security import crear_jwt
-from app.modules.auth.models import Usuario
 from app.modules.cases.composicion import ICONOS_PERMITIDOS
 from app.modules.cases.models import Caso, ComposicionEscenario
 from app.modules.cases.schemas_composicion import ComposicionEntrada
-from app.modules.files.models import ArchivoAdjunto
 from app.modules.files.service import TAMANO_MAXIMO_BYTES, detectar_tipo
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -157,77 +154,7 @@ def test_la_composicion_rechaza_mas_de_sesenta_capas() -> None:
         ComposicionEntrada.model_validate({"capas": capas})
 
 
-# --- integración contra MySQL real -------------------------------------------------------
-
-
-@pytest.fixture
-def db(base_real):
-    with SessionLocal() as sesion:
-        yield sesion
-
-
-def _docente(db, sufijo: str) -> Usuario:
-    momento = ahora()
-    docente = Usuario(
-        nombre=f"Docente{sufijo}",
-        correo=f"docente.{sufijo}@gmail.com",
-        rol="DOCENTE",
-        activo=True,
-        correo_verificado=True,
-        creado_en=momento,
-        actualizado_en=momento,
-    )
-    db.add(docente)
-    db.commit()
-    return docente
-
-
-def _cabeceras(usuario_id: str, rol: str = "DOCENTE", permisos=("CREAR_CASOS",)) -> dict:
-    token = crear_jwt(
-        {"sub": usuario_id, "rol": rol, "permisos": list(permisos), "estado_cuenta": "ACTIVO"}
-    )
-    return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture
-def taller(cliente, db):
-    """Un docente con un caso borrador de dos escenarios, y otro docente aparte."""
-    sufijo = uuid.uuid4().hex[:8]
-    docente, otro = _docente(db, sufijo), _docente(db, f"{sufijo}x")
-    cabeceras = _cabeceras(docente.id)
-    caso = cliente.post(
-        "/api/v1/cases",
-        headers=cabeceras,
-        json={
-            "nombre": "Caso con composición",
-            "desarrollo_situacional": "d",
-            "contexto_historia": "c",
-            "tiempo_estimado_min": 30,
-        },
-    )
-    assert caso.status_code == 201, caso.text
-    caso_id = caso.json()["id"]
-    escenarios = [
-        cliente.post(
-            f"/api/v1/cases/{caso_id}/escenarios",
-            headers=cabeceras,
-            json={"titulo": f"E{n}", "contexto": "contexto"},
-        ).json()["id"]
-        for n in (1, 2)
-    ]
-    yield {
-        "cabeceras": cabeceras,
-        "otro": _cabeceras(otro.id),
-        "docente_id": docente.id,
-        "otro_id": otro.id,
-        "caso_id": caso_id,
-        "escenarios": escenarios,
-    }
-    db.rollback()
-    db.execute(delete(Caso).where(Caso.id == caso_id))
-    db.execute(delete(ArchivoAdjunto).where(ArchivoAdjunto.docente_id.in_([docente.id, otro.id])))
-    db.execute(delete(Usuario).where(Usuario.id.in_([docente.id, otro.id])))
-    db.commit()
+# --- integración contra MySQL real (fixtures `db` y `taller` en conftest.py) ---------------
 
 
 def _subir(cliente, cabeceras, contenido=PNG, nombre="fondo.png", tipo="image/png"):

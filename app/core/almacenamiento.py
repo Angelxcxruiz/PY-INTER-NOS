@@ -5,6 +5,7 @@ implementación operativa es `AlmacenamientoLocal`; `AlmacenamientoS3` queda doc
 cuando el despliegue en AWS lo requiera.
 """
 
+import os
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -46,7 +47,14 @@ class AlmacenamientoLocal:
         del tipo_mime  # el disco no necesita el tipo; S3 sí lo guardaría como metadato
         destino = self._resolver(nombre)
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_bytes(contenido)
+        # Se escribe en un temporal y se renombra: un fallo a medias no deja un archivo parcial.
+        temporal = destino.with_name(destino.name + ".parcial")
+        try:
+            temporal.write_bytes(contenido)
+            os.replace(temporal, destino)
+        except BaseException:
+            temporal.unlink(missing_ok=True)
+            raise
         return PurePosixPath(nombre).as_posix()
 
     def url_publica(self, ruta: str) -> str:
